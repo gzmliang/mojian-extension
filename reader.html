@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>墨笺 InkNote</title>
+
+<!-- Local libraries (MV3 restricts CDN) -->
+<script src="lib/marked.min.js"></script>
+<link rel="stylesheet" href="lib/katex.min.css">
+<script src="lib/katex.min.js"></script>
+<script src="lib/auto-render.min.js"></script>
+<script src="lib/mermaid.min.js"></script>
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<header id="app-header">
+  <div class="header-left">
+    <span class="app-logo">◇ 墨笺</span>
+    <span class="file-name" id="fileName">未打开文件</span>
+  </div>
+  <div class="header-right">
+    <button class="btn-icon" id="btnOpenFile" title="打开文件">📂</button>
+    <button class="btn-icon" id="btnOpenUrl" title="从 URL 打开">🔗</button>
+    <button class="btn-icon" id="btnSettings" title="设置">⚙️</button>
+  </div>
+</header>
+
+<!-- ===== URL Dialog ===== -->
+<div class="overlay" id="urlOverlay">
+  <div class="dialog">
+    <div class="dialog-header">
+      <span>从 URL 打开</span>
+      <button class="btn-icon" data-action="closeUrlDialog">✕</button>
+    </div>
+    <input type="url" id="urlInput" placeholder="输入 Markdown 文件 URL（支持 GitHub raw）" class="dialog-input">
+    <div class="dialog-actions">
+      <button class="btn-secondary" data-action="closeUrlDialog">取消</button>
+      <button class="btn-primary" id="btnUrlConfirm">打开</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Settings Dialog ===== -->
+<div class="overlay" id="settingsOverlay">
+  <div class="dialog dialog-wide">
+    <div class="dialog-header">
+      <span>设置</span>
+      <button class="btn-icon" data-action="closeSettings">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-section">
+        <div class="settings-label">翻译 API</div>
+        <div class="settings-row">
+          <label>API 端点</label>
+          <input type="text" id="settingApiEndpoint" placeholder="https://api.deepseek.com/v1/chat/completions">
+        </div>
+        <div class="settings-row">
+          <label>API Key</label>
+          <input type="password" id="settingApiKey" placeholder="sk-...">
+        </div>
+        <div class="settings-row">
+          <label>模型</label>
+          <input type="text" id="settingApiModel" placeholder="deepseek-chat">
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-label">Edge TTS</div>
+        <div class="settings-row">
+          <label>服务器地址</label>
+          <input type="text" id="settingTtsEndpoint" placeholder="http://powerplus.blogsyte.com:5001">
+        </div>
+        <div class="settings-row">
+          <label>语音</label>
+          <select id="settingTtsVoice">
+            <option value="zh-CN-XiaoxiaoNeural">Xiaoxiao (女)</option>
+            <option value="zh-CN-YunxiNeural">Yunxi (男)</option>
+            <option value="zh-CN-XiaohanNeural">Xiaohan (女-温暖)</option>
+            <option value="zh-CN-YunjianNeural">Yunjian (男-成熟)</option>
+            <option value="en-US-AriaNeural">Aria (美式英语女)</option>
+            <option value="en-US-GuyNeural">Guy (美式英语男)</option>
+            <option value="ja-JP-NanamiNeural">Nanami (日语女)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn-secondary" data-action="closeSettings">取消</button>
+      <button class="btn-primary" id="btnSettingsSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Main Layout ===== -->
+<div id="mainLayout">
+  <!-- TOC Sidebar -->
+  <aside id="tocSidebar" class="sidebar hidden">
+    <div class="sidebar-header">
+      <span>大纲目录</span>
+      <button class="btn-icon" id="btnTocClose">✕</button>
+    </div>
+    <div id="tocItems" class="sidebar-body"></div>
+  </aside>
+
+  <!-- Reader Content -->
+  <main id="readerMain">
+    <!-- Search Bar -->
+    <div id="searchBar" class="search-bar hidden">
+      <input type="text" id="searchInput" placeholder="搜索文档…" autocomplete="off">
+      <span id="searchInfo" class="search-info"></span>
+      <button class="btn-icon-sm" id="searchPrev" title="上一个">▲</button>
+      <button class="btn-icon-sm" id="searchNext" title="下一个">▼</button>
+      <button class="btn-icon-sm" id="searchClose" title="关闭">✕</button>
+    </div>
+
+    <!-- Welcome / Content -->
+    <div id="welcomeScreen" class="welcome">
+      <div class="welcome-icon">◇</div>
+      <h2>墨笺 InkNote</h2>
+      <p class="welcome-desc">Markdown 阅读器 · 支持 LaTeX / Mermaid / TTS / 翻译</p>
+      <div class="welcome-actions">
+        <button class="btn-primary btn-lg" id="welcomeOpenFile">📂 打开文件</button>
+        <button class="btn-secondary btn-lg" id="welcomeOpenUrl">🔗 从 URL 打开</button>
+      </div>
+      <div class="welcome-tips">
+        <p>💡 拖拽 .md 文件到窗口打开</p>
+        <p>💡 右键网页上的 .md 链接 → 用墨笺打开</p>
+      </div>
+    </div>
+
+    <!-- Read Panel -->
+    <div id="readPanel" class="read-panel hidden">
+      <div id="content"></div>
+    </div>
+
+    <!-- Edit Panel -->
+    <div id="editPanel" class="edit-panel hidden">
+      <div id="cmEditor"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== Floating Toolbar (bottom) ===== -->
+<div id="floatingToolbar" class="floating-toolbar hidden">
+  <button class="btn-toolbar" id="tbTheme" title="主题切换">🎨</button>
+  <div class="tb-separator"></div>
+  <div class="tb-font-group">
+    <button class="btn-toolbar" id="tbFontDec" title="缩小字体">A−</button>
+    <span id="tbFontSize" class="tb-font-label">16</span>
+    <button class="btn-toolbar" id="tbFontInc" title="增大字体">A+</button>
+  </div>
+  <div class="tb-separator"></div>
+  <button class="btn-toolbar" id="tbTts" title="朗读">🔊</button>
+  <button class="btn-toolbar" id="tbTtsStop" title="停止朗读" style="display:none">⏹</button>
+  <div class="tb-separator"></div>
+  <button class="btn-toolbar" id="tbSearch" title="搜索">🔍</button>
+  <button class="btn-toolbar" id="tbToc" title="大纲">📑</button>
+  <button class="btn-toolbar" id="tbBookmarkAdd" title="添加书签">🔖</button>
+  <button class="btn-toolbar" id="tbBookmarkList" title="书签列表">📌</button>
+  <button class="btn-toolbar" id="tbHighlights" title="高亮列表">⭐</button>
+  <div class="tb-separator"></div>
+  <button class="btn-toolbar" id="tbEdit" title="编辑模式">✏️</button>
+  <button class="btn-toolbar" id="tbFullscreen" title="全屏">⛶</button>
+  <div class="tb-separator"></div>
+  <button class="btn-toolbar" id="tbExport" title="导出">📥</button>
+  <button class="btn-toolbar" id="tbTranslate" title="翻译选中文字">🌐</button>
+</div>
+
+<!-- ===== Debug Panel ===== -->
+<div id="debugPanel" class="debug-panel">
+  <div class="debug-header" id="debugToggle">
+    <span>🐛 调试日志</span>
+    <button class="btn-icon-sm" id="debugCopy">📋</button>
+    <button class="btn-icon-sm" id="debugClear">🗑</button>
+  </div>
+  <div id="debugBody" class="debug-body" style="display:none"></div>
+</div>
+
+<!-- ===== Selection Toolbar ===== -->
+<div id="selectionToolbar" class="selection-toolbar hidden">
+  <button id="selHighlight" class="btn-sel">⭐ 高亮</button>
+  <button id="selTranslate" class="btn-sel">🌐 翻译</button>
+  <button id="selTts" class="btn-sel">🔊 朗读</button>
+  <button id="selCopy" class="btn-sel">📋 复制</button>
+</div>
+
+<!-- ===== Modal / Panels ===== -->
+<div class="overlay" id="bookmarkOverlay">
+  <div class="dialog dialog-wide">
+    <div class="dialog-header">
+      <span>书签</span>
+      <button class="btn-icon" data-action="closeBookmarkPanel">✕</button>
+    </div>
+    <div id="bookmarkList" class="dialog-body"></div>
+  </div>
+</div>
+
+<div class="overlay" id="highlightOverlay">
+  <div class="dialog dialog-wide">
+    <div class="dialog-header">
+      <span>高亮标注</span>
+      <button class="btn-icon" data-action="closeHighlightPanel">✕</button>
+    </div>
+    <div id="highlightList" class="dialog-body"></div>
+  </div>
+</div>
+
+<div class="overlay" id="translateOverlay">
+  <div class="dialog">
+    <div class="dialog-header">
+      <span>翻译结果</span>
+      <button class="btn-icon" data-action="closeTranslateResult">✕</button>
+    </div>
+    <div id="translateResult" class="dialog-body translate-result"></div>
+  </div>
+</div>
+
+<!-- ===== Hidden file input ===== -->
+<input type="file" id="fileInput" accept=".md,.markdown,.txt,.html,.htm" style="display:none">
+
+<script src="reader.js"></script>
+</body>
+</html>
