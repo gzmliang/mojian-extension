@@ -20,6 +20,15 @@ function log(msg, level = 'I') {
 function logError(msg) { log(msg, 'E'); }
 function logWarn(msg) { log(msg, 'W'); }
 
+// Auto-capture runtime errors
+window.addEventListener('error', function(e) {
+  logError(e.message + ' at ' + (e.filename || '') + ':' + (e.lineno || ''));
+  return false;
+});
+window.addEventListener('unhandledrejection', function(e) {
+  logError('Promise: ' + (e.reason || '').toString().substring(0, 200));
+});
+
 // ==============================
 // Utils
 // ==============================
@@ -359,6 +368,10 @@ function enterWysiwyg() {
   state.editMode = 'wysiwyg';
   updateModeButtons();
   wysiwygContent.focus();
+  // Initialize undo stack
+  wysiwygUndoStack = [html];
+  wysiwygRedoStack = [];
+  log('[WYSIWYG] 撤消/重做已就绪');
 }
 
 function leaveWysiwyg(applyChanges) {
@@ -460,6 +473,37 @@ try {
       filter: ['s', 'del', 'strike'],
       replacement: function(content) { return '~~' + content + '~~'; }
     });
+    // Table rule: clean table conversion
+    turndownService.addRule('table', {
+      filter: 'table',
+      replacement: function(content, node) {
+        var rows = node.querySelectorAll('tr');
+        var md = '\n';
+        rows.forEach(function(row, ri) {
+          var cells = row.querySelectorAll('th, td');
+          var sepRow = ri === 0;
+          if (!sepRow) {
+            md += '|';
+            cells.forEach(function(cell) {
+              var text = (cell.textContent || '').trim();
+              md += ' ' + text + ' |';
+            });
+            md += '\n';
+          } else {
+            // Header row + separator
+            md += '|';
+            var sepCells = [];
+            cells.forEach(function(cell) {
+              var text = (cell.textContent || '').trim();
+              md += ' ' + text + ' |';
+              sepCells.push('---');
+            });
+            md += '\n| ' + sepCells.join(' | ') + ' |\n';
+          }
+        });
+        return md;
+      }
+    });
     log('[Turndown] HTML→MD 转换器已就绪');
   }
 } catch(e) { logWarn('Turndown 初始化失败: ' + e.message); }
@@ -496,8 +540,8 @@ function wysiwygCommand(cmd) {
       if (url) document.execCommand('createLink', false, url);
       break;
     }
-    case 'undo': document.execCommand('undo', false, null); break;
-    case 'redo': document.execCommand('redo', false, null); break;
+    case 'undo': wysiwygUndo(); break;
+    case 'redo': wysiwygRedo(); break;
   }
   document.getElementById('wysiwygContent').focus();
 }
@@ -1168,6 +1212,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   document.getElementById('tbStats').addEventListener('click', showStats);
+  document.getElementById('tbExportLog').addEventListener('click', exportLogs);
   document.getElementById('btnSettingsSave').addEventListener('click', function() { saveSettings(); closeSettings(); });
 
   // Debug
@@ -1227,13 +1272,18 @@ document.addEventListener('DOMContentLoaded', function() {
     origSetMode(mode);
   };
 
-  // WYSIWYG keyboard shortcuts
+  // WYSIWYG undo/redo keyboard shortcuts
   document.getElementById('wysiwygContent').addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 'b') { e.preventDefault(); wysiwygCommand('bold'); }
     if (e.ctrlKey && e.key === 'i') { e.preventDefault(); wysiwygCommand('italic'); }
     if (e.ctrlKey && e.key === 'u') { e.preventDefault(); wysiwygCommand('underline'); }
-    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); wysiwygCommand(e.shiftKey ? 'redo' : 'undo'); }
+    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); e.shiftKey ? wysiwygRedo() : wysiwygUndo(); }
     if (e.ctrlKey && e.key === 's') { e.preventDefault(); leaveWysiwyg(true); }
+  });
+  // Auto-save WYSIWYG state on input (debounced)
+  document.getElementById('wysiwygContent').addEventListener('input', function() {
+    clearTimeout(wysiwygUndoTimer);
+    wysiwygUndoTimer = setTimeout(saveWysiwygState, 500);
   });
 
   // Dialog actions
@@ -1376,33 +1426,62 @@ function showStats() {
 let tableSize = { rows: 3, cols: 3 };
 
 function wysiwygInsertTable(rows, cols) {
-  const table = document.createElement('table');
-  table.setAttribute('border', '1');
-  table.style.width = '100%';
-  table.style.borderCollapse = 'collapse';
-  for (let r = 0; r < rows; r++) {
-    const tr = document.createElement('tr');
-    for (let c = 0; c < cols; c++) {
-      const cell = document.createElement(r === 0 ? 'th' : 'td');
-      cell.innerHTML = '&nbsp;';
-      cell.style.padding = '6px 10px';
-      cell.style.border = '1px solid #ccc';
-      tr.appendChild(cell);
-    }
-    table.appendChild(tr);
+  // Use execCommand to insert at cursor position
+  var html = '<table style="width:100%;border-collapse:collapse;margin:8px 0;">';
+  html += '<thead><tr>';
+  for (var c = 0; c < cols; c++) html += '<th style="padding:8px 10px;border:1px solid #ddd;text-align:left;min-height:32px;">&nbsp;</th>';
+  html += '</tr></thead><tbody>';
+  for (var r = 1; r < rows; r++) {
+    html += '<tr>';
+    for (var c = 0; c < cols; c++) html += '<td style="padding:8px 10px;border:1px solid #ddd;min-height:32px;">&nbsp;</td>';
+    html += '</tr>';
   }
-  restoreSelection();
-  const sel = window.getSelection();
-  if (sel && sel.rangeCount > 0) {
-    const range = sel.getRangeAt(0);
-    range.deleteContents();
-    range.insertNode(table);
-  } else {
-    document.getElementById('wysiwygContent').appendChild(table);
-  }
+  html += '</tbody></table><br>';
+  document.execCommand('insertHTML', false, html);
+  document.getElementById('wysiwygContent').focus();
 }
 
 let savedRange = null;
+let wysiwygUndoStack = [];
+let wysiwygRedoStack = [];
+const MAX_UNDO = 50;
+let wysiwygUndoTimer = null;
+
+function saveWysiwygState() {
+  var el = document.getElementById('wysiwygContent');
+  if (!el) return;
+  var html = el.innerHTML;
+  if (wysiwygUndoStack.length === 0 || wysiwygUndoStack[wysiwygUndoStack.length - 1] !== html) {
+    wysiwygUndoStack.push(html);
+    if (wysiwygUndoStack.length > MAX_UNDO) wysiwygUndoStack.shift();
+    wysiwygRedoStack = [];
+  }
+}
+
+function wysiwygUndo() {
+  if (wysiwygUndoStack.length < 2) return;
+  var el = document.getElementById('wysiwygContent');
+  if (!el) return;
+  // Save current state to redo stack
+  wysiwygRedoStack.push(el.innerHTML);
+  // Pop current state
+  wysiwygUndoStack.pop();
+  // Restore previous state
+  el.innerHTML = wysiwygUndoStack[wysiwygUndoStack.length - 1];
+  el.focus();
+  log('[撤销]');
+}
+
+function wysiwygRedo() {
+  if (wysiwygRedoStack.length === 0) return;
+  var el = document.getElementById('wysiwygContent');
+  if (!el) return;
+  var state = wysiwygRedoStack.pop();
+  wysiwygUndoStack.push(state);
+  el.innerHTML = state;
+  el.focus();
+  log('[重做]');
+}
 function saveSelection() {
   const sel = window.getSelection();
   if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
@@ -1483,6 +1562,31 @@ function startAutoSave() {
 function stopAutoSave() {
   if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null; }
 }
+// ==============================
+// Export Logs
+// ==============================
+function exportLogs() {
+  var text = '===== 墨笺 InkNote 调试日志 =====\n';
+  text += '时间: ' + new Date().toLocaleString('zh-CN') + '\n';
+  text += '版本: v2.0\n';
+  text += '文件: ' + (state.currentFileName || '无') + '\n';
+  text += '模式: ' + state.editMode + '\n';
+  text += '主题: ' + state.theme + '\n';
+  text += '行数: ' + state.currentContent.split('\n').length + '\n';
+  text += '状态: ' + (state.isTtsPlaying ? '朗读中' : '正常') + '\n';
+  text += '================================\n\n';
+  _debugLogs.forEach(function(e) {
+    text += e.t + ' [' + e.level + '] ' + e.msg + '\n';
+  });
+  var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inknote-log-' + new Date().toISOString().slice(0, 19).replace(/[:-]/g, '') + '.txt';
+  a.click();
+  URL.revokeObjectURL(blob);
+  log('日志已导出 (' + _debugLogs.length + ' 条)');
+}
+
 function scrollPage(direction) {
   const panel = document.getElementById('readPanel');
   if (!panel) return;
