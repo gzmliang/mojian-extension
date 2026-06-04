@@ -1,4 +1,4 @@
-/* ===== 墨笺 InkNote — Reader Logic ===== */
+/* ===== 墨笺 InkNote v2.0 — Reader Logic ===== */
 
 // ==============================
 // Debug Log
@@ -7,12 +7,12 @@ const _debugLogs = [];
 function log(msg, level = 'I') {
   const t = new Date().toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0');
   _debugLogs.push({ t, msg, level });
-  console.log(`[墨笺] ${msg}`);
+  console.log('[墨笺] ' + msg);
   const body = document.getElementById('debugBody');
   if (body && body.style.display !== 'none') {
     const e = document.createElement('div');
     e.className = 'debug-entry';
-    e.innerHTML = `<span class="t">${t}</span> <span class="l-${level.toLowerCase()}">[${level}]</span> ${escapeHtml(msg)}`;
+    e.innerHTML = '<span class="t">' + t + '</span> <span class="l-' + level.toLowerCase() + '">[' + level + ']</span> ' + escapeHtml(msg);
     body.appendChild(e);
     body.scrollTop = body.scrollHeight;
   }
@@ -30,6 +30,19 @@ function escapeHtml(s) {
 function escapeJs(s) {
   return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/\n/g,'\\n');
 }
+function htmlToText(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  return d.textContent || '';
+}
+function countStats(text) {
+  const chars = text.length;
+  const cnChars = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length;
+  const enWords = (text.match(/[a-zA-Z]+/g) || []).length;
+  const lines = text.split('\n').length;
+  const paras = text.split(/\n\s*\n/).filter(p => p.trim()).length;
+  return { chars, cnChars, enWords, lines, paras };
+}
 
 // ==============================
 // State
@@ -41,17 +54,15 @@ const state = {
   isHtmlFile: false,
   fontSize: 16,
   theme: 'light',
-  isEditMode: false,
+  editMode: 'read', // 'read' | 'wysiwyg' | 'source'
   isFullscreen: false,
   isTtsPlaying: false,
   ttsParagraphs: [],
   ttsCurrentIdx: 0,
-  ttsEngine: 'browser', // 'browser' or 'edge'
   isSearchVisible: false,
   isTocVisible: false,
   searchMatches: [],
   searchCurrentIdx: -1,
-  currentContentHash: '',
 };
 
 // ==============================
@@ -62,7 +73,6 @@ function loadSettings() {
     const s = JSON.parse(localStorage.getItem('inknote_settings') || '{}');
     state.fontSize = s.fontSize || 16;
     state.theme = s.theme || 'light';
-    state.ttsEngine = s.ttsEngine || 'browser';
     document.getElementById('settingApiEndpoint').value = s.apiEndpoint || 'https://api.deepseek.com/v1/chat/completions';
     document.getElementById('settingApiKey').value = s.apiKey || '';
     document.getElementById('settingApiModel').value = s.apiModel || 'deepseek-chat';
@@ -70,13 +80,11 @@ function loadSettings() {
     document.getElementById('settingTtsVoice').value = s.ttsVoice || 'zh-CN-XiaoxiaoNeural';
     applyTheme(state.theme);
     applyFontSize(state.fontSize);
-  } catch(e) { logWarn('加载设置失败: ' + e.message); }
+  } catch(e) { logWarn('设置加载: ' + e.message); }
 }
 function saveSettings() {
   const s = {
-    fontSize: state.fontSize,
-    theme: state.theme,
-    ttsEngine: state.ttsEngine,
+    fontSize: state.fontSize, theme: state.theme,
     apiEndpoint: document.getElementById('settingApiEndpoint').value,
     apiKey: document.getElementById('settingApiKey').value,
     apiModel: document.getElementById('settingApiModel').value,
@@ -95,6 +103,9 @@ function applyTheme(theme) {
   document.body.className = document.body.className.replace(/theme-\w+/g, '').trim();
   if (theme !== 'light') document.body.classList.add('theme-' + theme);
   document.getElementById('tbTheme').textContent = theme === 'dark' ? '☀️' : theme === 'sepia' ? '🌙' : '🌞';
+  // Update mermaid theme
+  const mermaidTheme = theme === 'dark' ? 'dark' : theme === 'sepia' ? 'neutral' : 'default';
+  try { mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' }); } catch(e) {}
 }
 function cycleTheme() {
   const t = state.theme;
@@ -110,10 +121,95 @@ function applyFontSize(size) {
   state.fontSize = Math.max(8, Math.min(36, size));
   document.getElementById('tbFontSize').textContent = state.fontSize;
   document.getElementById('readPanel').style.fontSize = state.fontSize + 'px';
-  document.querySelectorAll('#readPanel pre code').forEach(el => el.style.fontSize = (state.fontSize * 0.9) + 'px');
+  document.getElementById('wysiwygContent').style.fontSize = state.fontSize + 'px';
 }
 function decFont() { applyFontSize(state.fontSize - 1); saveSettings(); }
 function incFont() { applyFontSize(state.fontSize + 1); saveSettings(); }
+
+// ==============================
+// Rendering engine
+// ==============================
+try { mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'strict' }); } catch(e) { console.warn(e.message); }
+try { marked.setOptions({ breaks: true, gfm: true }); } catch(e) { console.warn(e.message); }
+try { hljs.configure({ ignoreUnescapedHTML: true }); } catch(e) {}
+
+// ==============================
+// Recent Files
+// ==============================
+function getRecentFiles() {
+  try { return JSON.parse(localStorage.getItem('inknote_recent') || '[]'); } catch(e) { return []; }
+}
+function addRecentFile(name, path, content) {
+  const stats = countStats(content || '');
+  const entry = { name: name || 'untitled', path: path || name || '', time: Date.now(), size: (content || '').length, lines: stats.lines };
+  let recent = getRecentFiles();
+  recent = recent.filter(r => r.name !== name || r.path !== path);
+  recent.unshift(entry);
+  if (recent.length > 20) recent = recent.slice(0, 20);
+  localStorage.setItem('inknote_recent', JSON.stringify(recent));
+}
+function removeRecentFile(index) {
+  let recent = getRecentFiles();
+  recent.splice(index, 1);
+  localStorage.setItem('inknote_recent', JSON.stringify(recent));
+  renderRecentFiles();
+}
+function renderRecentFiles() {
+  const list = document.getElementById('recentFilesList');
+  const recent = getRecentFiles();
+  if (!list) return;
+  list.innerHTML = '';
+  if (recent.length === 0) {
+    list.innerHTML = '<div class="recent-file-empty">暂无最近文件</div>';
+    return;
+  }
+  recent.forEach((r, i) => {
+    const item = document.createElement('div');
+    item.className = 'recent-file-item';
+    const timeStr = r.time ? new Date(r.time).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+    const sizeStr = r.size ? (r.size > 1024 ? (r.size/1024).toFixed(1)+'KB' : r.size+'B') : '';
+    item.innerHTML = '<span class="name">' + escapeHtml(r.name) + '</span>' +
+      '<span class="time">' + timeStr + ' ' + sizeStr + '</span>' +
+      '<button class="btn-icon-sm" style="font-size:10px;color:#ccc;" data-rec-del="' + i + '">✕</button>';
+    item.addEventListener('click', function(e) {
+      if (e.target.closest('[data-rec-del]')) return;
+      const name = r.name;
+      // Try to reload from path if it's a URL, or prompt the user
+      if (r.path && (r.path.startsWith('http://') || r.path.startsWith('https://'))) {
+        openUrl(r.path);
+      } else {
+        // For local files, can't re-open from path. Show file picker pre-selected.
+        document.getElementById('fileInput').click();
+      }
+    });
+    list.appendChild(item);
+    // Wire delete button
+    item.querySelector('[data-rec-del]').addEventListener('click', function(e) {
+      e.stopPropagation();
+      removeRecentFile(parseInt(this.dataset.recDel));
+    });
+  });
+}
+
+// ==============================
+// File Info Bar
+// ==============================
+function updateFileInfo(content, name) {
+  const bar = document.getElementById('fileInfoBar');
+  bar.classList.remove('hidden');
+  document.getElementById('fileInfoPath').textContent = name || '';
+  const sizeStr = content ? (content.length > 1024 ? (content.length/1024).toFixed(1) + ' KB' : content.length + ' B') : '';
+  document.getElementById('fileInfoSize').textContent = sizeStr;
+  const stats = countStats(content || '');
+  document.getElementById('fileInfoStats').textContent = '中文字 ' + stats.cnChars + ' · 英文词 ' + stats.enWords + ' · 段落 ' + stats.paras + ' · 行数 ' + stats.lines;
+  updateStatusBar(stats);
+}
+function updateStatusBar(stats) {
+  const el = document.getElementById('statusBar');
+  if (stats) {
+    el.textContent = stats.chars + ' 字 · ' + stats.paras + ' 段';
+  }
+}
 
 // ==============================
 // File Loading
@@ -126,6 +222,8 @@ function openLocalFile(file) {
     state.currentFilePath = '';
     state.isHtmlFile = file.name.toLowerCase().endsWith('.html') || file.name.toLowerCase().endsWith('.htm');
     loadContent();
+    addRecentFile(state.currentFileName, state.currentFilePath, state.currentContent);
+    renderRecentFiles();
     log('已打开文件: ' + file.name + ' (' + state.currentContent.length + ' 字符)');
   };
   reader.onerror = function() { logError('读取文件失败'); };
@@ -143,6 +241,8 @@ async function openUrl(url) {
     state.currentFilePath = url;
     state.isHtmlFile = state.currentFileName.toLowerCase().endsWith('.html');
     loadContent();
+    addRecentFile(state.currentFileName, state.currentFilePath, state.currentContent);
+    renderRecentFiles();
     log('已加载 URL: ' + state.currentFileName + ' (' + text.length + ' 字符)');
   } catch(e) {
     logError('URL 加载失败: ' + e.message);
@@ -151,74 +251,81 @@ async function openUrl(url) {
 }
 
 function loadContent() {
-  hideWelcome();
+  // Hide welcome and enter read mode
+  state.editMode = 'read';
+  document.getElementById('welcomeScreen').classList.add('hidden');
+  document.getElementById('readPanel').classList.remove('hidden');
+  document.getElementById('wysiwygPanel').classList.add('hidden');
+  document.getElementById('editPanel').classList.add('hidden');
+  document.getElementById('wysiwygToolbar').classList.add('hidden');
+  document.getElementById('floatingToolbar').classList.remove('hidden');
   document.getElementById('fileName').textContent = state.currentFileName;
+  updateFileInfo(state.currentContent, state.currentFileName);
+  updateModeButtons();
+
   if (state.isHtmlFile) {
     document.getElementById('content').innerHTML = state.currentContent;
+    hljs.highlightAll();
   } else {
     renderMarkdown(state.currentContent);
   }
-  showToolbar();
   clearHighlights();
   loadBookmarksForFile();
   loadHighlightsForFile();
-  state.currentContentHash = simpleHash(state.currentContent);
-}
-
-function simpleHash(s) {
-  let h = 0;
-  for (let i = 0; i < Math.min(s.length, 1000); i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
-  return h;
 }
 
 // ==============================
-// Rendering engine (from mojian)
+// Markdown Rendering with Syntax Highlighting
 // ==============================
-try {
-  mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'strict' });
-} catch(e) {
-  console.warn('[墨笺] Mermaid 初始化跳过:', e.message);
-}
-try {
-  marked.setOptions({ breaks: true, gfm: true });
-} catch(e) {
-  console.warn('[墨笺] Marked 初始化跳过:', e.message);
-}
-
 function renderMarkdown(rawMd) {
   const readPanel = document.getElementById('readPanel');
   readPanel.classList.remove('hidden');
   state.currentContent = rawMd;
   try {
+    // Extract and preserve mermaid blocks
     const mermaidBlocks = [];
-    const preprocessed = rawMd.replace(/```mermaid\n([\s\S]*?)```/g, (match, code) => {
+    const preprocessed = rawMd.replace(/```mermaid\n([\s\S]*?)```/g, function(match, code) {
       const id = 'mermaid-' + mermaidBlocks.length;
-      mermaidBlocks.push({ id, code });
-      return `<div class="mermaid" id="${id}">${code}</div>`;
+      mermaidBlocks.push({ id: id, code: code });
+      return '<div class="mermaid" id="' + id + '">' + code + '</div>';
     });
     const html = marked.parse(preprocessed);
     document.getElementById('content').innerHTML = html;
     log('渲染完成, HTML长度: ' + html.length);
-    renderMathInElement(document.getElementById('content'), {
-      delimiters: [
-        { left: '$$', right: '$$', display: true },
-        { left: '$', right: '$', display: false },
-      ],
-      throwOnError: false, strict: false,
-    });
+
+    // KaTeX math rendering
+    try {
+      renderMathInElement(document.getElementById('content'), {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+        ],
+        throwOnError: false, strict: false,
+      });
+    } catch(e) { logWarn('KaTeX: ' + e.message); }
+
+    // Syntax highlighting via highlight.js
+    try {
+      document.querySelectorAll('#content pre code').forEach(function(block) {
+        if (!block.classList.contains('hljs')) {
+          hljs.highlightElement(block);
+        }
+      });
+    } catch(e) { logWarn('highlight.js: ' + e.message); }
+
+    // Mermaid rendering
     if (mermaidBlocks.length > 0) {
-      requestAnimationFrame(() => {
-        mermaidBlocks.forEach(({ id }) => {
-          const el = document.getElementById(id);
+      requestAnimationFrame(function() {
+        mermaidBlocks.forEach(function(item) {
+          const el = document.getElementById(item.id);
           if (el && el.textContent && el.textContent.trim()) {
-            mermaid.render(id + '-' + Date.now(), el.textContent.trim())
-              .then(result => { el.innerHTML = result.svg; })
-              .catch(e => { el.innerHTML = '<pre style="color:red;">Mermaid Error: ' + e.message + '</pre>'; });
+            mermaid.render(item.id + '-' + Date.now(), el.textContent.trim())
+              .then(function(result) { el.innerHTML = result.svg; })
+              .catch(function(e) { el.innerHTML = '<pre style="color:red;">Mermaid Error: ' + e.message + '</pre>'; });
           }
         });
       });
     }
-    // Re-apply highlights
     reapplyHighlightsAfterRender();
   } catch(e) {
     document.getElementById('content').innerHTML = '<pre style="color:red;">渲染错误: ' + escapeHtml(e.message) + '</pre>';
@@ -227,81 +334,222 @@ function renderMarkdown(rawMd) {
 }
 
 // ==============================
+// WYSIWYG Mode
+// ==============================
+function enterWysiwyg() {
+  if (state.editMode === 'wysiwyg') return;
+  log('[WYSIWYG] 进入所见即所得编辑模式');
+
+  // Save source content from current mode
+  if (state.editMode === 'source') {
+    state.currentContent = getSourceEditorContent();
+  }
+
+  // Convert markdown to HTML
+  const html = markdownToHtml(state.currentContent);
+  const wysiwygContent = document.getElementById('wysiwygContent');
+  wysiwygContent.innerHTML = html;
+
+  // Switch panels
+  document.getElementById('readPanel').classList.add('hidden');
+  document.getElementById('editPanel').classList.add('hidden');
+  document.getElementById('wysiwygPanel').classList.remove('hidden');
+  document.getElementById('wysiwygToolbar').classList.remove('hidden');
+
+  state.editMode = 'wysiwyg';
+  updateModeButtons();
+  wysiwygContent.focus();
+}
+
+function leaveWysiwyg(applyChanges) {
+  if (state.editMode !== 'wysiwyg') return;
+  log('[WYSIWYG] 离开编辑模式' + (applyChanges ? '（保存更改）' : ''));
+
+  if (applyChanges) {
+    const html = document.getElementById('wysiwygContent').innerHTML;
+    const md = htmlToMarkdown(html);
+    state.currentContent = md;
+    // Re-render
+    renderMarkdown(md);
+    updateFileInfo(md, state.currentFileName);
+  }
+
+  document.getElementById('wysiwygPanel').classList.add('hidden');
+  document.getElementById('wysiwygToolbar').classList.add('hidden');
+  document.getElementById('readPanel').classList.remove('hidden');
+  state.editMode = 'read';
+  updateModeButtons();
+}
+
+function enterSourceEdit() {
+  if (state.editMode === 'source') return;
+  log('[编辑] 进入源码编辑模式');
+
+  // Save content from WYSIWYG if coming from there
+  if (state.editMode === 'wysiwyg') {
+    const html = document.getElementById('wysiwygContent').innerHTML;
+    state.currentContent = htmlToMarkdown(html);
+  }
+
+  document.getElementById('readPanel').classList.add('hidden');
+  document.getElementById('wysiwygPanel').classList.add('hidden');
+  document.getElementById('wysiwygToolbar').classList.add('hidden');
+  document.getElementById('editPanel').classList.remove('hidden');
+
+  // Setup textarea
+  const editor = document.getElementById('cmEditor');
+  editor.innerHTML = '<textarea id="sourceTextarea" spellcheck="false" style="width:100%;height:100%;border:none;padding:16px;font-family:JetBrains Mono,monospace;font-size:14px;line-height:1.6;resize:none;outline:none;background:inherit;color:inherit;">' + escapeHtml(state.currentContent) + '</textarea>';
+
+  state.editMode = 'source';
+  updateModeButtons();
+  document.getElementById('sourceTextarea').focus();
+}
+
+function getSourceEditorContent() {
+  const ta = document.getElementById('sourceTextarea');
+  return ta ? ta.value : state.currentContent;
+}
+
+function markdownToHtml(md) {
+  try {
+    // Pre-process mermaid blocks to preserve them
+    const mermaidBlocks = [];
+    const preprocessed = md.replace(/```mermaid\n([\s\S]*?)```/g, function(match, code) {
+      const id = 'mmd-' + mermaidBlocks.length;
+      mermaidBlocks.push({ id: id, code: code });
+      return '<pre data-mermaid-id="' + id + '" class="mermaid-placeholder">[' + id + ']</pre>';
+    });
+    let html = marked.parse(preprocessed);
+    // Replace mermaid placeholders
+    mermaidBlocks.forEach(function(item) {
+      html = html.replace('<pre data-mermaid-id="' + item.id + '" class="mermaid-placeholder">[' + item.id + ']</pre>',
+        '<pre class="mermaid-wysiwyg">' + escapeHtml('```mermaid\n' + item.code + '\n```') + '</pre>');
+    });
+    return html;
+  } catch(e) {
+    logWarn('MD→HTML: ' + e.message);
+    return '<p>' + escapeHtml(md.substring(0, 200)) + '...</p>';
+  }
+}
+
+function htmlToMarkdown(html) {
+  try {
+    if (typeof turndownService === 'undefined') {
+      // Fallback: use text content
+      logWarn('Turndown 未加载，使用纯文本回退');
+      return htmlToText(html);
+    }
+    return turndownService.turndown(html);
+  } catch(e) {
+    logWarn('HTML→MD: ' + e.message);
+    return htmlToText(html);
+  }
+}
+
+// Initialize turndown service
+let turndownService = null;
+try {
+  if (typeof TurndownService !== 'undefined') {
+    turndownService = new TurndownService({
+      headingStyle: 'atx',
+      codeBlockStyle: 'fenced',
+      emDelimiter: '*',
+      bulletListMarker: '-',
+    });
+    turndownService.addRule('strikethrough', {
+      filter: ['s', 'del', 'strike'],
+      replacement: function(content) { return '~~' + content + '~~'; }
+    });
+    log('[Turndown] HTML→MD 转换器已就绪');
+  }
+} catch(e) { logWarn('Turndown 初始化失败: ' + e.message); }
+
+// WYSIWYG formatting commands
+function wysiwygCommand(cmd) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) {
+    // Insert placeholder or just apply
+  }
+  switch(cmd) {
+    case 'bold': document.execCommand('bold', false, null); break;
+    case 'italic': document.execCommand('italic', false, null); break;
+    case 'underline': document.execCommand('underline', false, null); break;
+    case 'heading1': document.execCommand('formatBlock', false, '<h1>'); break;
+    case 'heading2': document.execCommand('formatBlock', false, '<h2>'); break;
+    case 'heading3': document.execCommand('formatBlock', false, '<h3>'); break;
+    case 'unorderedList': document.execCommand('insertUnorderedList', false, null); break;
+    case 'orderedList': document.execCommand('insertOrderedList', false, null); break;
+    case 'blockquote': document.execCommand('formatBlock', false, '<blockquote>'); break;
+    case 'code': {
+      const selText = sel.toString().trim();
+      if (selText) {
+        // Wrap selection in code
+        document.execCommand('insertHTML', false, '<pre><code>' + escapeHtml(selText) + '</code></pre>');
+      } else {
+        // Insert code block
+        document.execCommand('insertHTML', false, '<pre><code>代码</code></pre>');
+      }
+      break;
+    }
+    case 'link': {
+      const url = prompt('输入链接 URL:', 'https://');
+      if (url) document.execCommand('createLink', false, url);
+      break;
+    }
+    case 'undo': document.execCommand('undo', false, null); break;
+    case 'redo': document.execCommand('redo', false, null); break;
+  }
+  document.getElementById('wysiwygContent').focus();
+}
+
+// ==============================
+// Mode Switching
+// ==============================
+function setMode(mode) {
+  log('切换模式: ' + mode);
+  if (mode === 'read') {
+    if (state.editMode === 'wysiwyg') leaveWysiwyg(true);
+    else if (state.editMode === 'source') {
+      state.currentContent = getSourceEditorContent();
+      renderMarkdown(state.currentContent);
+      document.getElementById('editPanel').classList.add('hidden');
+      document.getElementById('readPanel').classList.remove('hidden');
+      state.editMode = 'read';
+      updateModeButtons();
+    }
+  } else if (mode === 'wysiwyg') {
+    enterWysiwyg();
+  } else if (mode === 'source') {
+    enterSourceEdit();
+  }
+}
+
+function updateModeButtons() {
+  document.getElementById('tbModeRead').classList.toggle('mode-active', state.editMode === 'read');
+  document.getElementById('tbModeWysiwyg').classList.toggle('mode-active', state.editMode === 'wysiwyg');
+  document.getElementById('tbModeSource').classList.toggle('mode-active', state.editMode === 'source');
+  // Show/hide font size controls (only in read mode)
+  const fontGroup = document.querySelector('.tb-font-group');
+  if (fontGroup) fontGroup.style.display = state.editMode === 'read' ? '' : 'none';
+}
+
+// ==============================
 // Fullscreen
 // ==============================
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().then(() => {
+    document.documentElement.requestFullscreen().then(function() {
       state.isFullscreen = true;
-      document.getElementById('tbFullscreen').textContent = '⛶';
-    }).catch(e => logWarn('全屏: ' + e.message));
+    }).catch(function(e) { logWarn('全屏: ' + e.message); });
   } else {
-    document.exitFullscreen().then(() => {
+    document.exitFullscreen().then(function() {
       state.isFullscreen = false;
-      document.getElementById('tbFullscreen').textContent = '⛶';
     });
   }
 }
-document.addEventListener('fullscreenchange', () => {
+document.addEventListener('fullscreenchange', function() {
   state.isFullscreen = !!document.fullscreenElement;
 });
-
-// ==============================
-// Edit Mode (CM6)
-// ==============================
-let cmView = null;
-
-async function ensureCm6() {
-  if (cmView) return cmView;
-  // CM6 无法在 MV3 扩展页加载（CDN ESM import 被 CSP 拦截）
-  // 使用 textarea 回退作为编辑器
-  log('[编辑器] 使用 textarea（MV3 限制无法加载 CM6）');
-  const ta = document.createElement('textarea');
-  ta.style.cssText = 'width:100%;height:100%;border:none;padding:16px;font-family:monospace;font-size:15px;line-height:1.6;resize:none;outline:none;background:inherit;color:inherit;';
-  ta.value = state.currentContent;
-  const editor = document.getElementById('cmEditor');
-  editor.innerHTML = '';
-  editor.appendChild(ta);
-  cmView = {
-    state: { doc: { toString: () => ta.value, length: ta.value.length } },
-    dispatch: (obj) => {
-      const insert = obj.changes ? obj.changes.insert : obj.insert;
-      if (insert !== undefined) ta.value = insert;
-    },
-    focus: () => ta.focus(),
-    _isTextarea: true,
-  };
-  return cmView;
-}
-
-function toggleEdit() {
-  if (state.isEditMode) {
-    // Edit → Read
-    if (cmView) {
-      const content = cmView.state.doc.toString();
-      if (content !== state.currentContent) {
-        state.currentContent = content;
-        renderMarkdown(content);
-        log('编辑内容已同步到阅读');
-      }
-    }
-    state.isEditMode = false;
-    document.getElementById('editPanel').classList.add('hidden');
-    document.getElementById('readPanel').classList.remove('hidden');
-    document.getElementById('tbEdit').textContent = '✏️';
-  } else {
-    // Read → Edit
-    state.isEditMode = true;
-    document.getElementById('readPanel').classList.add('hidden');
-    document.getElementById('editPanel').classList.remove('hidden');
-    document.getElementById('tbEdit').textContent = '📖';
-    ensureCm6().then(v => {
-      if (v && v.state.doc.toString() !== state.currentContent) {
-        v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: state.currentContent } });
-      }
-    });
-  }
-}
 
 // ==============================
 // Search
@@ -320,7 +568,6 @@ function hideSearch() {
   clearSearchHighlights();
   document.getElementById('tbSearch').classList.remove('active');
 }
-
 function doSearch(query) {
   clearSearchHighlights();
   if (!query) { document.getElementById('searchInfo').textContent = ''; return; }
@@ -330,15 +577,13 @@ function doSearch(query) {
     acceptNode: function(node) {
       if (!node.parentElement) return NodeFilter.FILTER_REJECT;
       const tag = node.parentElement.tagName;
-      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG' || tag === 'MATH' || tag === 'NOSCRIPT')
-        return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
+      return (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG' || tag === 'MATH' || tag === 'NOSCRIPT')
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
     }
   });
   const textNodes = [];
   while (walker.nextNode()) textNodes.push(walker.currentNode);
   if (textNodes.length === 0) { document.getElementById('searchInfo').textContent = '0'; return; }
-
   let fullText = '', offsets = [];
   for (let i = 0; i < textNodes.length; i++) {
     offsets.push(fullText.length);
@@ -347,7 +592,6 @@ function doSearch(query) {
   const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   const allMatches = [...fullText.matchAll(regex)];
   if (allMatches.length === 0) { document.getElementById('searchInfo').textContent = '0'; return; }
-
   state.searchMatches = [];
   for (let m = allMatches.length - 1; m >= 0; m--) {
     const ms = allMatches[m].index, me = ms + allMatches[m][0].length;
@@ -357,7 +601,6 @@ function doSearch(query) {
   document.getElementById('searchInfo').textContent = allMatches.length + ' 个';
   highlightSearchMatch(0);
 }
-
 function highlightTextRange(textNodes, offsets, start, end) {
   for (let i = 0; i < textNodes.length; i++) {
     const nodeStart = offsets[i];
@@ -382,9 +625,8 @@ function highlightTextRange(textNodes, offsets, start, end) {
     textNodes[i] = span.childNodes[0];
   }
 }
-
 function highlightSearchMatch(index) {
-  document.querySelectorAll('.search-match-active').forEach(s => s.className = 'search-match');
+  document.querySelectorAll('.search-match-active').forEach(function(s) { s.className = 'search-match'; });
   if (index >= 0 && index < state.searchMatches.length) {
     state.searchCurrentIdx = index;
     state.searchMatches[index].className = 'search-match-active';
@@ -394,9 +636,8 @@ function highlightSearchMatch(index) {
 }
 function nextSearch() { highlightSearchMatch((state.searchCurrentIdx + 1) % state.searchMatches.length); }
 function prevSearch() { highlightSearchMatch(state.searchCurrentIdx <= 0 ? state.searchMatches.length - 1 : state.searchCurrentIdx - 1); }
-
 function clearSearchHighlights() {
-  document.querySelectorAll('.search-match, .search-match-active').forEach(span => {
+  document.querySelectorAll('.search-match, .search-match-active').forEach(function(span) {
     const parent = span.parentNode;
     if (parent) { parent.replaceChild(document.createTextNode(span.textContent), span); parent.normalize(); }
   });
@@ -405,7 +646,7 @@ function clearSearchHighlights() {
 }
 
 // ==============================
-// TOC (Table of Contents)
+// TOC
 // ==============================
 function toggleToc() {
   state.isTocVisible = !state.isTocVisible;
@@ -417,15 +658,15 @@ function buildToc() {
   const headings = state.currentContent.match(/^#{1,6}\s+.+$/gm);
   container.innerHTML = '';
   if (!headings) { container.innerHTML = '<div class="list-empty">暂无标题</div>'; return; }
-  headings.forEach(h => {
+  headings.forEach(function(h) {
     const level = (h.match(/^#+/) || [''])[0].length;
     const title = h.replace(/^#+\s*/, '');
     const btn = document.createElement('button');
     btn.className = 'toc-item';
     btn.textContent = title;
-    btn.style.paddingLeft = (16 + (level-1) * 16) + 'px';
-    btn.style.fontSize = (13 - level * 0.3) + 'px';
-    btn.addEventListener('click', () => {
+    btn.style.paddingLeft = (14 + (level-1) * 14) + 'px';
+    btn.style.fontSize = Math.max(11, 13 - level * 0.3) + 'px';
+    btn.addEventListener('click', function() {
       scrollToHeading(title);
       toggleToc();
     });
@@ -444,66 +685,59 @@ function scrollToHeading(headingText) {
 // ==============================
 function getBookmarks() {
   const key = 'inknote_bookmarks_' + (state.currentFileName || 'default');
-  try { return JSON.parse(localStorage.getItem(key) || '[]'); }
-  catch(e) { return []; }
+  try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) { return []; }
 }
 function saveBookmarks(bm) {
   const key = 'inknote_bookmarks_' + (state.currentFileName || 'default');
   localStorage.setItem(key, JSON.stringify(bm));
 }
 function addBookmark() {
-  // Use the actual paragraph from current scroll position
   const panel = document.getElementById('readPanel');
-  if (!panel) { log('书签: 无法添加（无内容）'); return; }
-  // Find which paragraph is at the top of the viewport
+  if (!panel) { log('书签: 无内容'); return; }
   const paras = document.querySelectorAll('#content p, #content h1, #content h2, #content h3, #content h4, #content h5, #content h6, #content pre, #content blockquote, #content li');
-  let closestIdx = 0;
-  let closestDist = Infinity;
+  let closestIdx = 0, closestDist = Infinity;
   const viewTop = panel.scrollTop;
-  paras.forEach((p, i) => {
+  paras.forEach(function(p, i) {
     const dist = Math.abs(p.offsetTop - viewTop);
     if (dist < closestDist) { closestDist = dist; closestIdx = i; }
   });
   const snippet = (paras[closestIdx]?.textContent || '').trim().substring(0, 80);
   const bm = getBookmarks();
-  bm.push({ idx: closestIdx, snippet, time: Date.now() });
+  bm.push({ idx: closestIdx, snippet: snippet, time: Date.now() });
   saveBookmarks(bm);
-  log('书签已添加: #' + closestIdx + ' ' + snippet.substring(0, 30));
+  log('书签已添加: #' + closestIdx);
   highlightAndScroll(closestIdx);
 }
 function loadBookmarksForFile() {
-  // Re-apply visual highlights for saved bookmarks? No need—bookmarks are panel-only
-  log('书签已加载: ' + getBookmarks().length + ' 条');
+  log('书签: ' + getBookmarks().length + ' 条');
 }
 function showBookmarks() {
   const bm = getBookmarks();
   const list = document.getElementById('bookmarkList');
   list.innerHTML = '';
   if (bm.length === 0) {
-    list.innerHTML = '<div class="list-empty">暂无书签<br><span style="font-size:12px;color:#aaa;">滚动到目标段落 → 点击 🔖 添加书签</span></div>';
+    list.innerHTML = '<div class="list-empty">暂无书签<br><span style="font-size:12px;color:#aaa;">滚动到目标段落，点击 🔖 添加</span></div>';
   } else {
-    bm.forEach((b, i) => {
+    bm.forEach(function(b, i) {
       const item = document.createElement('div');
       item.className = 'list-item';
       const timeStr = b.time ? new Date(b.time).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-      item.innerHTML = `<div class="list-item-text" data-bm-idx="${i}" data-para-idx="${b.idx}">📍 #${b.idx} ${escapeHtml(b.snippet)}<br><span style="font-size:11px;color:#999;">${timeStr}</span></div>` +
+      item.innerHTML = '<div class="list-item-text" data-para-idx="' + b.idx + '">📍 #' + b.idx + ' ' + escapeHtml(b.snippet) +
+        '<br><span style="font-size:11px;color:#999;">' + timeStr + '</span></div>' +
         '<div class="list-item-actions"><button class="list-item-action" data-del="' + i + '" title="删除">🗑</button></div>';
-      // Jump to bookmark
-      item.querySelector('.list-item-text').addEventListener('click', (e) => {
+      item.querySelector('.list-item-text').addEventListener('click', function(e) {
         const btn = e.currentTarget;
         const paraIdx = parseInt(btn.dataset.paraIdx);
         closeBookmarkPanel();
         scrollToParagraph(paraIdx);
         highlightAndScroll(paraIdx);
       });
-      // Delete bookmark
-      item.querySelector('[data-del]').addEventListener('click', (e) => {
+      item.querySelector('[data-del]').addEventListener('click', function(e) {
         e.stopPropagation();
-        const idx = parseInt(e.currentTarget.dataset.del);
+        const idx = parseInt(this.dataset.del);
         bm.splice(idx, 1);
         saveBookmarks(bm);
         showBookmarks();
-        log('书签已删除');
       });
       list.appendChild(item);
     });
@@ -516,27 +750,21 @@ function closeBookmarkPanel() { document.getElementById('bookmarkOverlay').class
 // Highlights
 // ==============================
 function getHighlights() {
-  try { return JSON.parse(localStorage.getItem('inknote_highlights_' + state.currentFileName) || '[]'); }
-  catch(e) { return []; }
+  try { return JSON.parse(localStorage.getItem('inknote_highlights_' + state.currentFileName) || '[]'); } catch(e) { return []; }
 }
-function saveHighlights(hl) {
-  localStorage.setItem('inknote_highlights_' + state.currentFileName, JSON.stringify(hl));
-}
+function saveHighlights(hl) { localStorage.setItem('inknote_highlights_' + state.currentFileName, JSON.stringify(hl)); }
 function loadHighlightsForFile() {
-  const hls = getHighlights();
-  hls.forEach(h => applyHighlight(h.paraIdx, h.startOffset, h.endOffset, '#FFE082'));
+  getHighlights().forEach(function(h) { applyHighlight(h.paraIdx, h.startOffset, h.endOffset, '#FFE082'); });
 }
 function reapplyHighlightsAfterRender() {
-  setTimeout(() => {
-    const hls = getHighlights();
-    hls.forEach(h => applyHighlight(h.paraIdx, h.startOffset, h.endOffset, '#FFE082'));
-  }, 100);
+  setTimeout(function() {
+    getHighlights().forEach(function(h) { applyHighlight(h.paraIdx, h.startOffset, h.endOffset, '#FFE082'); });
+  }, 150);
 }
 function clearHighlights() {
-  document.querySelectorAll('.user-highlight').forEach(sp => {
+  document.querySelectorAll('.user-highlight').forEach(function(sp) {
     while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp);
-    sp.parentNode.removeChild(sp);
-    sp.parentNode.normalize();
+    sp.parentNode.removeChild(sp); sp.parentNode.normalize();
   });
 }
 function applyHighlight(paraIdx, startOffset, endOffset, color) {
@@ -549,11 +777,7 @@ function applyHighlight(paraIdx, startOffset, endOffset, color) {
     const textNodes = [];
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let charCount = 0;
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      textNodes.push({ node, start: charCount, end: charCount + node.textContent.length });
-      charCount += node.textContent.length;
-    }
+    while (walker.nextNode()) { const n = walker.currentNode; textNodes.push({node:n, start:charCount, end:charCount + n.textContent.length}); charCount += n.textContent.length; }
     let startTN = null, startOff = 0, endTN = null, endOff = 0;
     for (const tn of textNodes) {
       if (!startTN && tn.start <= startOffset && tn.end > startOffset) { startTN = tn.node; startOff = startOffset - tn.start; }
@@ -566,49 +790,34 @@ function applyHighlight(paraIdx, startOffset, endOffset, color) {
     const frag = range.extractContents();
     const span = document.createElement('span');
     span.className = 'user-highlight';
-    span.style.background = color + ' !important';
-    span.dataset.hlStart = startOffset;
-    span.dataset.hlEnd = endOffset;
-    span.dataset.hlPara = paraIdx;
     span.appendChild(frag);
     range.insertNode(span);
-  } catch(e) { logWarn('高亮错误: ' + e.message); }
+  } catch(e) { logWarn('高亮: ' + e.message); }
 }
 function removeHighlightByRange(paraIdx, startOffset, endOffset) {
   const all = document.getElementById('content').querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
   if (paraIdx < 0 || paraIdx >= all.length) return;
-  const el = all[paraIdx];
-  const spans = el.querySelectorAll('.user-highlight');
-  for (const sp of spans) {
+  all[paraIdx].querySelectorAll('.user-highlight').forEach(function(sp) {
     if (parseInt(sp.dataset.hlStart) === startOffset && parseInt(sp.dataset.hlEnd) === endOffset) {
       while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp);
-      sp.parentNode.removeChild(sp);
-      sp.parentNode.normalize();
-      return;
+      sp.parentNode.removeChild(sp); sp.parentNode.normalize();
     }
-  }
+  });
 }
 function showHighlights() {
   const hls = getHighlights();
   const list = document.getElementById('highlightList');
   list.innerHTML = '';
-  if (hls.length === 0) {
-    list.innerHTML = '<div class="list-empty">暂无高亮</div>';
-  } else {
-    hls.forEach((h, i) => {
+  if (hls.length === 0) { list.innerHTML = '<div class="list-empty">暂无高亮</div>'; }
+  else {
+    hls.forEach(function(h, i) {
       const item = document.createElement('div');
       item.className = 'list-item';
-      item.innerHTML = '<div class="list-item-text" data-idx="' + i + '">⭐ ' + escapeHtml(h.text.substring(0, 80)) + '</div>' +
-        '<div class="list-item-actions"><button class="list-item-action" data-del="' + i + '">✕</button></div>';
-      item.querySelector('.list-item-text').addEventListener('click', () => {
-        closeHighlightPanel();
-        highlightAndScroll(h.paraIdx);
-      });
-      item.querySelector('[data-del]').addEventListener('click', () => {
+      item.innerHTML = '<div class="list-item-text">⭐ ' + escapeHtml(h.text.substring(0, 80)) + '</div><div class="list-item-actions"><button class="list-item-action" data-del="' + i + '">✕</button></div>';
+      item.querySelector('.list-item-text').addEventListener('click', function() { closeHighlightPanel(); highlightAndScroll(h.paraIdx); });
+      item.querySelector('[data-del]').addEventListener('click', function() {
         removeHighlightByRange(h.paraIdx, h.startOffset, h.endOffset);
-        hls.splice(i, 1);
-        saveHighlights(hls);
-        showHighlights();
+        hls.splice(i, 1); saveHighlights(hls); showHighlights();
       });
       list.appendChild(item);
     });
@@ -617,32 +826,34 @@ function showHighlights() {
 }
 function closeHighlightPanel() { document.getElementById('highlightOverlay').classList.remove('show'); }
 
-// Selection → add highlight
-document.addEventListener('selectionchange', () => {
+// Selection handling
+document.addEventListener('selectionchange', function() {
   clearTimeout(window._selTimer);
-  window._selTimer = setTimeout(() => {
+  window._selTimer = setTimeout(function() {
     const s = window.getSelection();
     if (s && !s.isCollapsed && s.toString().trim()) {
       const rect = s.getRangeAt(0).getBoundingClientRect();
       const bar = document.getElementById('selectionToolbar');
-      bar.style.top = Math.max(rect.top - 44, 8) + 'px';
-      bar.style.left = Math.min(rect.left + rect.width/2 - 80, window.innerWidth - 180) + 'px';
-      bar.classList.remove('hidden');
+      if (bar) {
+        bar.style.top = Math.max(rect.top - 42, 8) + 'px';
+        bar.style.left = Math.min(rect.left + rect.width/2 - 80, window.innerWidth - 180) + 'px';
+        bar.classList.remove('hidden');
+      }
     } else {
-      document.getElementById('selectionToolbar').classList.add('hidden');
+      const bar = document.getElementById('selectionToolbar');
+      if (bar) bar.classList.add('hidden');
     }
   }, 400);
 });
-document.addEventListener('mousedown', (e) => {
+document.addEventListener('mousedown', function(e) {
   if (!e.target.closest('.selection-toolbar')) {
-    document.getElementById('selectionToolbar').classList.add('hidden');
+    const bar = document.getElementById('selectionToolbar');
+    if (bar) bar.classList.add('hidden');
   }
 });
 
-// ==============================
-// Selection Toolbar Actions
-// ==============================
-document.getElementById('selHighlight').addEventListener('click', () => {
+// Selection toolbar actions
+document.getElementById('selHighlight').addEventListener('click', function() {
   const s = window.getSelection();
   if (!s || s.isCollapsed) return;
   const info = getSelectionInfo();
@@ -652,22 +863,21 @@ document.getElementById('selHighlight').addEventListener('click', () => {
   applyHighlight(info.paraIdx, info.startOffset, info.endOffset, '#FFE082');
   s.removeAllRanges();
   document.getElementById('selectionToolbar').classList.add('hidden');
-  log('高亮已添加: ' + info.text.substring(0, 30));
 });
-document.getElementById('selTranslate').addEventListener('click', () => {
+document.getElementById('selTranslate').addEventListener('click', function() {
   const s = window.getSelection();
   if (s) doTranslate(s.toString());
   document.getElementById('selectionToolbar').classList.add('hidden');
 });
-document.getElementById('selTts').addEventListener('click', () => {
+document.getElementById('selTts').addEventListener('click', function() {
   const s = window.getSelection();
-  if (s && s.toString().trim()) speakText(s.toString().trim());
+  if (s && s.toString().trim()) speakText(s.toString().trim(), null);
   s?.removeAllRanges();
   document.getElementById('selectionToolbar').classList.add('hidden');
 });
-document.getElementById('selCopy').addEventListener('click', () => {
+document.getElementById('selCopy').addEventListener('click', function() {
   const s = window.getSelection();
-  if (s) navigator.clipboard.writeText(s.toString()).catch(() => {});
+  if (s) navigator.clipboard.writeText(s.toString()).catch(function() {});
   s?.removeAllRanges();
   document.getElementById('selectionToolbar').classList.add('hidden');
 });
@@ -677,74 +887,41 @@ function getSelectionInfo() {
   const text = s.toString().trim();
   const all = document.getElementById('content').querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
   const range = s.getRangeAt(0);
-  const startNode = range.startContainer;
-  const endNode = range.endContainer;
   let startParaIdx = -1, startOffset = range.startOffset;
   for (let i = 0; i < all.length; i++) {
-    if (all[i].contains(startNode)) {
+    if (all[i].contains(range.startContainer)) {
       startParaIdx = i;
       const walker = document.createTreeWalker(all[i], NodeFilter.SHOW_TEXT);
       let charCount = 0;
       while (walker.nextNode()) {
-        if (walker.currentNode === startNode) { startOffset = charCount + range.startOffset; break; }
+        if (walker.currentNode === range.startContainer) { startOffset = charCount + range.startOffset; break; }
         else charCount += walker.currentNode.textContent.length;
       }
       break;
     }
   }
-  let endParaIdx = startParaIdx, endOffset = range.endOffset;
+  let endOffset = range.endOffset;
   for (let i = 0; i < all.length; i++) {
-    if (all[i].contains(endNode)) {
-      endParaIdx = i;
+    if (all[i].contains(range.endContainer)) {
       const walker = document.createTreeWalker(all[i], NodeFilter.SHOW_TEXT);
       let charCount = 0;
       while (walker.nextNode()) {
-        if (walker.currentNode === endNode) { endOffset = charCount + range.endOffset; break; }
+        if (walker.currentNode === range.endContainer) { endOffset = charCount + range.endOffset; break; }
         else charCount += walker.currentNode.textContent.length;
       }
       break;
     }
   }
-  return { text, paraIdx: startParaIdx, startOffset, endOffset };
+  return { text: text, paraIdx: startParaIdx, startOffset: startOffset, endOffset: endOffset };
 }
 
-// ==============================
 // Paragraph helpers
-// ==============================
-function getCurrentParagraphIndex() {
-  const content = document.getElementById('content');
-  if (!content) return 0;
-  const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
-  const cx = window.innerWidth / 2;
-  const cy = window.innerHeight / 3;
-  const el = document.elementFromPoint(cx, cy);
-  if (!el) return 0;
-  let target = el;
-  while (target && target !== content) {
-    for (let i = 0; i < blocks.length; i++) {
-      if (blocks[i] === target || blocks[i].contains(target)) return i;
-    }
-    target = target.parentElement;
-  }
-  return 0;
-}
-function getParagraphAt(index) {
-  const content = document.getElementById('content');
-  if (!content) return '';
-  const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
-  if (index >= 0 && index < blocks.length) return blocks[index].textContent.trim().substring(0, 80);
-  return '';
-}
 function scrollToParagraph(index) {
-  const content = document.getElementById('content');
-  if (!content) return;
-  const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
+  const blocks = document.querySelectorAll('#content p, #content h1, #content h2, #content h3, #content h4, #content h5, #content h6, #content pre, #content blockquote, #content li');
   if (index >= 0 && index < blocks.length) blocks[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function highlightAndScroll(index) {
-  const content = document.getElementById('content');
-  if (!content) return;
-  const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
+  const blocks = document.querySelectorAll('#content p, #content h1, #content h2, #content h3, #content h4, #content h5, #content h6, #content pre, #content blockquote, #content li');
   if (index >= 0 && index < blocks.length) {
     const el = blocks[index];
     el.style.transition = 'background-color 0.3s';
@@ -753,11 +930,8 @@ function highlightAndScroll(index) {
     el.style.padding = '4px 8px';
     el.style.margin = '2px -4px';
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => {
-      el.style.backgroundColor = '';
-      el.style.borderRadius = '';
-      el.style.padding = '';
-      el.style.margin = '';
+    setTimeout(function() {
+      el.style.backgroundColor = ''; el.style.borderRadius = ''; el.style.padding = ''; el.style.margin = '';
     }, 1500);
   }
 }
@@ -766,31 +940,27 @@ function getParagraphsText() {
   if (!content) return '[]';
   const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
   const texts = [];
-  blocks.forEach(el => { const t = el.textContent.trim(); if (t) texts.push(t); });
+  blocks.forEach(function(el) { const t = el.textContent.trim(); if (t) texts.push(t); });
   return JSON.stringify(texts);
 }
 
 // ==============================
-// TTS (Text To Speech)
+// TTS
 // ==============================
 function getCleanText(text) {
-  // Simplified — for paragraph text we already have clean text
-  // Remove CJK spaces for Edge TTS
   return text.replace(/([\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])\s+(?=[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])/g, '$1');
 }
-
 function startTts() {
   const paraText = JSON.parse(getParagraphsText());
-  if (paraText.length === 0) { log('TTS: 无段落可朗读'); return; }
-  state.ttsParagraphs = paraText.map(t => getCleanText(t));
+  if (paraText.length === 0) { log('TTS: 无段落'); return; }
+  state.ttsParagraphs = paraText.map(function(t) { return getCleanText(t); });
   state.ttsCurrentIdx = 0;
   state.isTtsPlaying = true;
   document.getElementById('tbTts').style.display = 'none';
   document.getElementById('tbTtsStop').style.display = '';
-  log('TTS 开始, 共 ' + paraText.length + ' 段落');
+  log('TTS 开始, ' + paraText.length + ' 段');
   playNext(0);
 }
-
 function stopTts() {
   window.speechSynthesis.cancel();
   state.isTtsPlaying = false;
@@ -801,65 +971,43 @@ function stopTts() {
   clearTtsHighlight();
   log('TTS 已停止');
 }
-
 function playNext(idx) {
-  if (idx >= state.ttsParagraphs.length) {
-    log('TTS 完毕');
-    stopTts();
-    return;
-  }
+  if (idx >= state.ttsParagraphs.length) { stopTts(); return; }
   const text = state.ttsParagraphs[idx];
   if (!text || text.trim().length === 0) { playNext(idx + 1); return; }
   state.ttsCurrentIdx = idx;
   ttsHighlight(idx);
-  speakText(text, () => playNext(idx + 1));
+  speakText(text, function() { playNext(idx + 1); });
 }
-
 function speakText(text, onDone) {
-  // Try Edge TTS first, fallback to browser TTS
   const settings = JSON.parse(localStorage.getItem('inknote_settings') || '{}');
   const endpoint = settings.ttsEndpoint || 'http://powerplus.blogsyte.com:5001';
-
-  // Try Edge TTS
   fetch(endpoint + '/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text: text,
-      voice: settings.ttsVoice || 'zh-CN-XiaoxiaoNeural',
-      rate: '-10%',
-    })
-  })
-  .then(resp => {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: text, voice: settings.ttsVoice || 'zh-CN-XiaoxiaoNeural', rate: '-10%' })
+  }).then(function(resp) {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     return resp.blob();
-  })
-  .then(blob => {
+  }).then(function(blob) {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.onended = () => { URL.revokeObjectURL(url); if (onDone) onDone(); };
-    audio.onerror = () => { URL.revokeObjectURL(url); if (onDone) onDone(); };
-    audio.play().catch(() => { if (onDone) onDone(); });
-  })
-  .catch(() => {
-    // Fallback to Browser TTS
+    audio.onended = function() { URL.revokeObjectURL(url); if (onDone) onDone(); };
+    audio.onerror = function() { URL.revokeObjectURL(url); if (onDone) onDone(); };
+    audio.play().catch(function() { if (onDone) onDone(); });
+  }).catch(function() {
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'zh-CN';
     utter.rate = 1.0;
-    utter.onend = () => { if (onDone) onDone(); };
-    utter.onerror = () => { if (onDone) onDone(); };
+    utter.onend = function() { if (onDone) onDone(); };
+    utter.onerror = function() { if (onDone) onDone(); };
     window.speechSynthesis.speak(utter);
   });
 }
-
 function ttsHighlight(idx) {
   clearTtsHighlight();
-  const content = document.getElementById('content');
-  if (!content) return;
-  const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
+  const blocks = document.querySelectorAll('#content p, #content h1, #content h2, #content h3, #content h4, #content h5, #content h6, #content pre, #content blockquote, #content li');
   if (idx >= 0 && idx < blocks.length) {
     const el = blocks[idx];
-    el.style.transition = 'background-color 0.3s';
     el.style.backgroundColor = 'rgba(26, 115, 232, 0.15)';
     el.style.borderRadius = '4px';
     el.style.padding = '4px 8px';
@@ -869,34 +1017,28 @@ function ttsHighlight(idx) {
   }
 }
 function clearTtsHighlight() {
-  document.querySelectorAll('[data-tts-highlight]').forEach(el => {
-    el.style.backgroundColor = '';
-    el.style.borderRadius = '';
-    el.style.padding = '';
-    el.style.margin = '';
+  document.querySelectorAll('[data-tts-highlight]').forEach(function(el) {
+    el.style.backgroundColor = ''; el.style.borderRadius = ''; el.style.padding = ''; el.style.margin = '';
     el.removeAttribute('data-tts-highlight');
   });
 }
 
 // ==============================
-// Translation (DeepSeek API)
+// Translation
 // ==============================
 function doTranslate(text) {
   const settings = JSON.parse(localStorage.getItem('inknote_settings') || '{}');
   const endpoint = settings.apiEndpoint || 'https://api.deepseek.com/v1/chat/completions';
   const apiKey = settings.apiKey;
   const model = settings.apiModel || 'deepseek-chat';
-
   if (!apiKey) {
     alert('请先设置翻译 API Key（⚙️ 设置）');
     document.getElementById('settingsOverlay').classList.add('show');
     return;
   }
-
   log('翻译: ' + text.substring(0, 50) + '...');
   fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
     body: JSON.stringify({
       model: model,
       messages: [
@@ -905,14 +1047,12 @@ function doTranslate(text) {
       ],
       max_tokens: 1024,
     })
-  })
-  .then(resp => resp.json())
-  .then(data => {
+  }).then(function(resp) { return resp.json(); })
+  .then(function(data) {
     const result = data.choices?.[0]?.message?.content || '翻译失败';
     document.getElementById('translateResult').textContent = result;
     document.getElementById('translateOverlay').classList.add('show');
-  })
-  .catch(err => {
+  }).catch(function(err) {
     logError('翻译失败: ' + err.message);
     document.getElementById('translateResult').textContent = '翻译失败: ' + err.message;
     document.getElementById('translateOverlay').classList.add('show');
@@ -924,16 +1064,15 @@ function closeTranslateResult() { document.getElementById('translateOverlay').cl
 // Export
 // ==============================
 function showExportMenu() {
-  const choice = confirm('导出格式选项:\n确定 → 导出 HTML\n取消 → 复制 Markdown 原文');
+  const choice = confirm('导出格式:\n确定 → HTML\n取消 → 复制 Markdown');
   if (choice) {
     exportHtml();
   } else {
-    navigator.clipboard.writeText(state.currentContent).then(() => {
-      log('Markdown 已复制到剪贴板');
-    }).catch(() => {});
+    navigator.clipboard.writeText(state.currentContent).then(function() {
+      log('Markdown 已复制');
+    }).catch(function() {});
   }
 }
-
 function exportHtml() {
   const html = document.getElementById('content').innerHTML;
   const fullHtml = '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
@@ -953,88 +1092,27 @@ function exportHtml() {
 }
 
 // ==============================
-// Page scroll
-// ==============================
-function scrollPage(direction) {
-  const panel = document.getElementById('readPanel');
-  if (!panel) return;
-  const amount = panel.clientHeight * 0.85;
-  panel.scrollBy({ top: direction === 'down' ? amount : -amount, behavior: 'smooth' });
-}
-
-// ==============================
-// UI helpers
-// ==============================
-function hideWelcome() {
-  document.getElementById('welcomeScreen').classList.add('hidden');
-  document.getElementById('readPanel').classList.remove('hidden');
-  document.getElementById('floatingToolbar').classList.remove('hidden');
-}
-function showToolbar() {
-  document.getElementById('floatingToolbar').classList.remove('hidden');
-}
-
-// ==============================
-// Open file dialog
-// ==============================
-function showOpenFileDialog() {
-  document.getElementById('fileInput').click();
-}
-function showUrlDialog() {
-  document.getElementById('urlOverlay').classList.add('show');
-  document.getElementById('urlInput').value = '';
-  document.getElementById('urlInput').focus();
-}
-function closeUrlDialog() { document.getElementById('urlOverlay').classList.remove('show'); }
-
-// Settings
-function openSettings() { document.getElementById('settingsOverlay').classList.add('show'); }
-function closeSettings() { document.getElementById('settingsOverlay').classList.remove('show'); }
-
-// ==============================
-// Drag & Drop
-// ==============================
-document.addEventListener('dragover', (e) => { e.preventDefault(); });
-document.addEventListener('drop', (e) => {
-  e.preventDefault();
-  const files = e.dataTransfer.files;
-  if (files.length > 0) {
-    const file = files[0];
-    if (file.name.endsWith('.md') || file.name.endsWith('.markdown') || file.name.endsWith('.txt') || file.name.endsWith('.html')) {
-      openLocalFile(file);
-    } else {
-      logWarn('不支持的格式: ' + file.name);
-    }
-  } else {
-    // Check for URL from drag
-    const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
-    if (url && (url.endsWith('.md') || url.endsWith('.markdown') || url.endsWith('.txt'))) {
-      openUrl(url);
-    }
-  }
-});
-
-// ==============================
-// Event Bindings
+// Event Bindings (DOMContentLoaded)
 // ==============================
 document.addEventListener('DOMContentLoaded', function() {
   loadSettings();
+  renderRecentFiles();
 
   // File operations
-  document.getElementById('btnOpenFile').addEventListener('click', showOpenFileDialog);
+  document.getElementById('btnOpenFile').addEventListener('click', function() { document.getElementById('fileInput').click(); });
   document.getElementById('btnOpenUrl').addEventListener('click', showUrlDialog);
   document.getElementById('btnSettings').addEventListener('click', openSettings);
-  document.getElementById('welcomeOpenFile').addEventListener('click', showOpenFileDialog);
+  document.getElementById('welcomeOpenFile').addEventListener('click', function() { document.getElementById('fileInput').click(); });
   document.getElementById('welcomeOpenUrl').addEventListener('click', showUrlDialog);
-  document.getElementById('fileInput').addEventListener('change', (e) => {
+  document.getElementById('fileInput').addEventListener('change', function(e) {
     if (e.target.files[0]) openLocalFile(e.target.files[0]);
     e.target.value = '';
   });
-  document.getElementById('btnUrlConfirm').addEventListener('click', () => {
+  document.getElementById('btnUrlConfirm').addEventListener('click', function() {
     const url = document.getElementById('urlInput').value.trim();
     if (url) { openUrl(url); closeUrlDialog(); }
   });
-  document.getElementById('urlInput').addEventListener('keydown', (e) => {
+  document.getElementById('urlInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') document.getElementById('btnUrlConfirm').click();
   });
 
@@ -1050,9 +1128,9 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('tbTtsStop').addEventListener('click', stopTts);
 
   // Search
-  document.getElementById('tbSearch').addEventListener('click', () => { if (state.isSearchVisible) hideSearch(); else showSearch(); });
-  document.getElementById('searchInput').addEventListener('input', (e) => doSearch(e.target.value));
-  document.getElementById('searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.shiftKey ? prevSearch() : nextSearch(); });
+  document.getElementById('tbSearch').addEventListener('click', function() { state.isSearchVisible ? hideSearch() : showSearch(); });
+  document.getElementById('searchInput').addEventListener('input', function(e) { doSearch(e.target.value); });
+  document.getElementById('searchInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') e.shiftKey ? prevSearch() : nextSearch(); });
   document.getElementById('searchNext').addEventListener('click', nextSearch);
   document.getElementById('searchPrev').addEventListener('click', prevSearch);
   document.getElementById('searchClose').addEventListener('click', hideSearch);
@@ -1066,8 +1144,10 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('tbBookmarkList').addEventListener('click', showBookmarks);
   document.getElementById('tbHighlights').addEventListener('click', showHighlights);
 
-  // Edit
-  document.getElementById('tbEdit').addEventListener('click', toggleEdit);
+  // Mode switching
+  document.getElementById('tbModeRead').addEventListener('click', function() { setMode('read'); });
+  document.getElementById('tbModeWysiwyg').addEventListener('click', function() { setMode('wysiwyg'); });
+  document.getElementById('tbModeSource').addEventListener('click', function() { setMode('source'); });
 
   // Fullscreen
   document.getElementById('tbFullscreen').addEventListener('click', toggleFullscreen);
@@ -1076,42 +1156,88 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('tbExport').addEventListener('click', showExportMenu);
 
   // Translate
-  document.getElementById('tbTranslate').addEventListener('click', () => {
+  document.getElementById('tbTranslate').addEventListener('click', function() {
     const s = window.getSelection();
     if (s && s.toString().trim()) doTranslate(s.toString());
     else log('翻译: 请先选中文字');
   });
 
-  // Settings save
-  document.getElementById('btnSettingsSave').addEventListener('click', () => { saveSettings(); closeSettings(); });
+  // Shortcuts help
+  document.getElementById('tbShortcuts').addEventListener('click', function() {
+    document.getElementById('shortcutsOverlay').classList.add('show');
+  });
+
+  document.getElementById('tbStats').addEventListener('click', showStats);
+  document.getElementById('btnSettingsSave').addEventListener('click', function() { saveSettings(); closeSettings(); });
 
   // Debug
-  document.getElementById('debugToggle').addEventListener('click', () => {
+  document.getElementById('debugToggle').addEventListener('click', function() {
     const body = document.getElementById('debugBody');
-    body.style.display = body.style.display === 'none' ? 'block' : 'none';
-    if (body.style.display === 'block') {
+    const show = body.style.display === 'none';
+    body.style.display = show ? 'block' : 'none';
+    if (show) {
       body.innerHTML = '';
-      _debugLogs.forEach(e => {
+      _debugLogs.forEach(function(e) {
         const entry = document.createElement('div');
         entry.className = 'debug-entry';
-        entry.innerHTML = `<span class="t">${e.t}</span> <span class="l-${e.level.toLowerCase()}">[${e.level}]</span> ${escapeHtml(e.msg)}`;
+        entry.innerHTML = '<span class="t">' + e.t + '</span> <span class="l-' + e.level.toLowerCase() + '">[' + e.level + ']</span> ' + escapeHtml(e.msg);
         body.appendChild(entry);
       });
       body.scrollTop = body.scrollHeight;
     }
   });
-  document.getElementById('debugCopy').addEventListener('click', () => {
-    const text = _debugLogs.map(e => `${e.t} [${e.level}] ${e.msg}`).join('\n');
-    navigator.clipboard.writeText(text).then(() => log('日志已复制')).catch(() => {});
+  document.getElementById('debugCopy').addEventListener('click', function() {
+    const text = _debugLogs.map(function(e) { return e.t + ' [' + e.level + '] ' + e.msg; }).join('\n');
+    navigator.clipboard.writeText(text).then(function() { log('日志已复制'); }).catch(function() {});
   });
-  document.getElementById('debugClear').addEventListener('click', () => {
+  document.getElementById('debugClear').addEventListener('click', function() {
     _debugLogs.length = 0;
     document.getElementById('debugBody').innerHTML = '';
     log('日志已清空');
   });
 
-  // Dialog action buttons (data-action)
-  document.addEventListener('click', (e) => {
+  // WYSIWYG formatting toolbar
+  document.querySelectorAll('.btn-wysiwyg').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const cmd = this.dataset.cmd;
+      if (cmd) wysiwygCommand(cmd);
+    });
+  });
+
+  // WYSIWYG table/image/hr commands
+  document.querySelectorAll('.btn-wysiwyg[data-cmd="table"]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const rows = parseInt(prompt('表格行数:', '3')) || 3;
+      const cols = parseInt(prompt('表格列数:', '4')) || 4;
+      if (rows > 0 && cols > 0) wysiwygInsertTable(rows, cols);
+    });
+  });
+  document.querySelectorAll('.btn-wysiwyg[data-cmd="image"]').forEach(function(btn) {
+    btn.addEventListener('click', wysiwygInsertImage);
+  });
+  document.querySelectorAll('.btn-wysiwyg[data-cmd="hr"]').forEach(function(btn) {
+    btn.addEventListener('click', wysiwygInsertHr);
+  });
+
+  // Auto-save when entering edit modes
+  const origSetMode = setMode;
+  setMode = function(mode) {
+    if (mode === 'wysiwyg' || mode === 'source') startAutoSave();
+    else stopAutoSave();
+    origSetMode(mode);
+  };
+
+  // WYSIWYG keyboard shortcuts
+  document.getElementById('wysiwygContent').addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 'b') { e.preventDefault(); wysiwygCommand('bold'); }
+    if (e.ctrlKey && e.key === 'i') { e.preventDefault(); wysiwygCommand('italic'); }
+    if (e.ctrlKey && e.key === 'u') { e.preventDefault(); wysiwygCommand('underline'); }
+    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); wysiwygCommand(e.shiftKey ? 'redo' : 'undo'); }
+    if (e.ctrlKey && e.key === 's') { e.preventDefault(); leaveWysiwyg(true); }
+  });
+
+  // Dialog actions
+  document.addEventListener('click', function(e) {
     const action = e.target.closest('[data-action]')?.dataset.action;
     if (!action) return;
     if (action === 'closeUrlDialog') closeUrlDialog();
@@ -1119,48 +1245,247 @@ document.addEventListener('DOMContentLoaded', function() {
     else if (action === 'closeBookmarkPanel') closeBookmarkPanel();
     else if (action === 'closeHighlightPanel') closeHighlightPanel();
     else if (action === 'closeTranslateResult') closeTranslateResult();
+    else if (action === 'closeShortcuts') document.getElementById('shortcutsOverlay').classList.remove('show');
   });
 
   // Click overlay background to close
-  document.querySelectorAll('.overlay').forEach(o => {
-    o.addEventListener('click', (e) => {
-      if (e.target === o) { o.classList.remove('show'); }
+  document.querySelectorAll('.overlay').forEach(function(o) {
+    o.addEventListener('click', function(e) {
+      if (e.target === o) o.classList.remove('show');
     });
   });
 
-  // Keyboard shortcuts
-  document.addEventListener('keydown', (e) => {
-    // Ctrl+S: save (no-op in extension, but toggle edit)
-    if (e.ctrlKey && e.key === 's') { e.preventDefault(); if (state.isEditMode) toggleEdit(); }
-    // Ctrl+F: search
+  // Global keyboard shortcuts
+  document.addEventListener('keydown', function(e) {
+    // Skip if in input/textarea
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      if (e.key === 'Escape') {
+        if (state.isSearchVisible) hideSearch();
+        if (state.editMode === 'source') { setMode('read'); }
+      }
+      return;
+    }
+
     if (e.ctrlKey && e.key === 'f') { e.preventDefault(); showSearch(); }
-    // Escape: close modals / search / sidebar
+    if (e.ctrlKey && e.key === 'e') { e.preventDefault(); setMode(state.editMode === 'read' ? 'wysiwyg' : 'read'); }
+    if (e.ctrlKey && e.key === 's') { e.preventDefault(); if (state.editMode === 'wysiwyg') leaveWysiwyg(true); }
     if (e.key === 'Escape') {
       if (state.isSearchVisible) hideSearch();
       if (state.isTocVisible) toggleToc();
-      document.querySelectorAll('.overlay.show').forEach(o => o.classList.remove('show'));
+      document.querySelectorAll('.overlay.show').forEach(function(o) { o.classList.remove('show'); });
     }
-  });
-
-  // Keyboard nav for page (u/d)
-  document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === '?') {
+      document.getElementById('shortcutsOverlay').classList.toggle('show');
+    }
     if (e.key === 'j' || e.key === 'ArrowDown') scrollPage('down');
     if (e.key === 'k' || e.key === 'ArrowUp') scrollPage('up');
   });
 
-  // Handle URL params (from context menu)
+  // Handle URL params
   const params = new URLSearchParams(window.location.search);
   const urlParam = params.get('url');
   const textParam = params.get('text');
-  if (urlParam) {
-    openUrl(urlParam);
-  } else if (textParam) {
+  if (urlParam) openUrl(urlParam);
+  else if (textParam) {
     state.currentContent = textParam;
     state.currentFileName = '选中文本.md';
     loadContent();
   }
 
-  log('墨笺 InkNote 已启动');
-  log('💡 拖拽 .md 文件、右键 .md 链接打开');
+  log('墨笺 InkNote v2.0 已启动');
+  log('💡 按 ? 查看快捷键');
 });
+
+// ==============================
+// Dialog Helpers
+// ==============================
+function showUrlDialog() {
+  document.getElementById('urlOverlay').classList.add('show');
+  document.getElementById('urlInput').value = '';
+  document.getElementById('urlInput').focus();
+}
+function closeUrlDialog() { document.getElementById('urlOverlay').classList.remove('show'); }
+function openSettings() { document.getElementById('settingsOverlay').classList.add('show'); }
+function closeSettings() { document.getElementById('settingsOverlay').classList.remove('show'); }
+
+// ==============================
+// Drag & Drop
+// ==============================
+document.addEventListener('dragover', function(e) { e.preventDefault(); });
+document.addEventListener('drop', function(e) {
+  e.preventDefault();
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    const file = files[0];
+    if (file.name.match(/\.(md|markdown|txt|html?)$/i)) {
+      openLocalFile(file);
+    } else {
+      logWarn('不支持的格式: ' + file.name);
+    }
+  } else {
+    const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+    if (url && url.match(/\.(md|markdown|txt)$/i)) openUrl(url);
+  }
+});
+
+// ==============================
+// Statistics Dialog
+// ==============================
+function showStats() {
+  const stats = countStats(state.currentContent || '');
+  const md = state.currentContent || '';
+  const cnChars = (md.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length;
+  const enWords = (md.match(/[a-zA-Z]+/g) || []).length;
+  const numbers = (md.match(/\d+/g) || []).length;
+  const spaces = (md.match(/\s/g) || []).length;
+  const puncts = (md.match(/[，。！？、；：""''（）【】《》—…·,.!?;:\"'()\[\]{}<>\/\\\-=+@#$%^&*|~`]/g) || []).length;
+  const codeBlocks = (md.match(/```[\s\S]*?```/g) || []).length;
+  const formulas = (md.match(/\$\$[\s\S]*?\$\$|\$[^$\n]+\$/g) || []).length;
+  const images = (md.match(/!\[.*?\]\(.*?\)/g) || []).length;
+  const links = (md.match(/\[.*?\]\(.*?\)/g) || []).length;
+  const tables = (md.match(/^\|.+\|$/gm) || []).length > 0 ? (md.match(/^\|[^|]+\|[^|]+\|$/gm) || []).length : 0;
+  const headings = (md.match(/^#{1,6}\s+.+$/gm) || []).length;
+
+  const total = stats.chars + enWords;
+  const msg = [
+    '📊 文档统计',
+    '─────────────',
+    '总字符（含空格）: ' + stats.chars,
+    '中文字符: ' + cnChars,
+    '英文单词: ' + enWords,
+    '数字: ' + numbers,
+    '标点符号: ' + puncts,
+    '─────────────',
+    '段落数: ' + stats.paras,
+    '总行数: ' + stats.lines,
+    '代码块: ' + codeBlocks,
+    '公式: ' + formulas,
+    '图片: ' + images,
+    '链接: ' + links,
+    '标题: ' + headings,
+    '表格行: ' + tables,
+    '─────────────',
+    '预估阅读时间: ' + Math.max(1, Math.round(total / 500)) + ' 分钟（500字/分钟）',
+  ].join('\n');
+  alert(msg);
+}
+
+// ==============================
+// WYSIWYG Table & Image Insert
+// ==============================
+let tableSize = { rows: 3, cols: 3 };
+
+function wysiwygInsertTable(rows, cols) {
+  const table = document.createElement('table');
+  table.setAttribute('border', '1');
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  for (let r = 0; r < rows; r++) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement(r === 0 ? 'th' : 'td');
+      cell.innerHTML = '&nbsp;';
+      cell.style.padding = '6px 10px';
+      cell.style.border = '1px solid #ccc';
+      tr.appendChild(cell);
+    }
+    table.appendChild(tr);
+  }
+  restoreSelection();
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(table);
+  } else {
+    document.getElementById('wysiwygContent').appendChild(table);
+  }
+}
+
+let savedRange = null;
+function saveSelection() {
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
+}
+function restoreSelection() {
+  if (savedRange) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(savedRange);
+    savedRange = null;
+  }
+}
+
+function wysiwygInsertImage() {
+  const url = prompt('输入图片 URL:', 'https://');
+  if (!url) return;
+  saveSelection();
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.maxWidth = '100%';
+  img.style.borderRadius = '6px';
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(img);
+    // Move cursor after image
+    const span = document.createElement('span');
+    range.insertNode(span);
+    range.setStartAfter(span);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
+function wysiwygInsertHr() {
+  saveSelection();
+  const hr = document.createElement('hr');
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(hr);
+    // Move cursor after hr
+    const span = document.createElement('span');
+    range.insertNode(span);
+    range.setStartAfter(span);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
+// ==============================
+// Auto-save in edit mode
+// ==============================
+let autoSaveTimer = null;
+function startAutoSave() {
+  stopAutoSave();
+  autoSaveTimer = setInterval(function() {
+    if (state.editMode === 'wysiwyg') {
+      const html = document.getElementById('wysiwygContent').innerHTML;
+      const md = htmlToMarkdown(html);
+      if (md !== state.currentContent) {
+        state.currentContent = md;
+        log('[自动保存] 内容已保存');
+      }
+    } else if (state.editMode === 'source') {
+      const ta = document.getElementById('sourceTextarea');
+      if (ta && ta.value !== state.currentContent) {
+        state.currentContent = ta.value;
+        log('[自动保存] 内容已保存');
+      }
+    }
+  }, 30000);
+}
+function stopAutoSave() {
+  if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null; }
+}
+function scrollPage(direction) {
+  const panel = document.getElementById('readPanel');
+  if (!panel) return;
+  const amount = panel.clientHeight * 0.85;
+  panel.scrollBy({ top: direction === 'down' ? amount : -amount, behavior: 'smooth' });
+}

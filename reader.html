@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>墨笺 InkNote</title>
 
-<!-- Local libraries (MV3 restricts CDN) -->
+<!-- Local libraries -->
 <script src="lib/marked.min.js"></script>
 <link rel="stylesheet" href="lib/katex.min.css">
 <script src="lib/katex.min.js"></script>
 <script src="lib/auto-render.min.js"></script>
 <script src="lib/mermaid.min.js"></script>
-
+<script src="lib/highlight.min.js"></script>
+<script src="lib/turndown.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -28,6 +29,38 @@
     <button class="btn-icon" id="btnSettings" title="设置">⚙️</button>
   </div>
 </header>
+
+<!-- ===== File Info Bar ===== -->
+<div id="fileInfoBar" class="file-info-bar hidden">
+  <span id="fileInfoPath" class="file-info-text"></span>
+  <span class="file-info-divider">|</span>
+  <span id="fileInfoSize" class="file-info-text"></span>
+  <span class="file-info-divider">|</span>
+  <span id="fileInfoStats" class="file-info-text"></span>
+</div>
+
+<!-- ===== WYSIWYG Formatting Toolbar ===== -->
+<div id="wysiwygToolbar" class="wysiwyg-toolbar hidden">
+  <button class="btn-wysiwyg" data-cmd="bold" title="粗体 Ctrl+B"><b>B</b></button>
+  <button class="btn-wysiwyg" data-cmd="italic" title="斜体 Ctrl+I"><i>I</i></button>
+  <button class="btn-wysiwyg" data-cmd="underline" title="下划线 Ctrl+U"><u>U</u></button>
+  <span class="wysiwyg-sep"></span>
+  <button class="btn-wysiwyg" data-cmd="heading1" title="标题1">H1</button>
+  <button class="btn-wysiwyg" data-cmd="heading2" title="标题2">H2</button>
+  <button class="btn-wysiwyg" data-cmd="heading3" title="标题3">H3</button>
+  <span class="wysiwyg-sep"></span>
+  <button class="btn-wysiwyg" data-cmd="unorderedList" title="无序列表">•</button>
+  <button class="btn-wysiwyg" data-cmd="orderedList" title="有序列表">1.</button>
+  <button class="btn-wysiwyg" data-cmd="blockquote" title="引用">❝</button>
+  <button class="btn-wysiwyg" data-cmd="code" title="代码块">&lt;/&gt;</button>
+  <button class="btn-wysiwyg" data-cmd="link" title="链接">🔗</button>
+  <button class="btn-wysiwyg" data-cmd="image" title="图片">🖼</button>
+  <button class="btn-wysiwyg" data-cmd="table" title="表格">⊞</button>
+  <button class="btn-wysiwyg" data-cmd="hr" title="分隔线">―</button>
+  <span class="wysiwyg-sep"></span>
+  <button class="btn-wysiwyg" data-cmd="undo" title="撤销 ↩">↩</button>
+  <button class="btn-wysiwyg" data-cmd="redo" title="重做 ↪">↪</button>
+</div>
 
 <!-- ===== URL Dialog ===== -->
 <div class="overlay" id="urlOverlay">
@@ -94,6 +127,30 @@
   </div>
 </div>
 
+<!-- ===== Shortcuts Dialog ===== -->
+<div class="overlay" id="shortcutsOverlay">
+  <div class="dialog">
+    <div class="dialog-header">
+      <span>键盘快捷键</span>
+      <button class="btn-icon" data-action="closeShortcuts">✕</button>
+    </div>
+    <div class="dialog-body shortcuts-list">
+      <div class="shortcut-row"><kbd>Ctrl+F</kbd><span>搜索文档</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+B</kbd><span>粗体 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+I</kbd><span>斜体 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+U</kbd><span>下划线 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+Z</kbd><span>撤销 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+Shift+Z</kbd><span>重做 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+S</kbd><span>保存编辑 → 切换阅读</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+E</kbd><span>切换编辑模式</span></div>
+      <div class="shortcut-row"><kbd>j / ↓</kbd><span>向下翻页</span></div>
+      <div class="shortcut-row"><kbd>k / ↑</kbd><span>向上翻页</span></div>
+      <div class="shortcut-row"><kbd>Esc</kbd><span>关闭弹窗 / 搜索</span></div>
+      <div class="shortcut-row"><kbd>?</kbd><span>打开本帮助</span></div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== Main Layout ===== -->
 <div id="mainLayout">
   <!-- TOC Sidebar -->
@@ -120,14 +177,19 @@
     <div id="welcomeScreen" class="welcome">
       <div class="welcome-icon">◇</div>
       <h2>墨笺 InkNote</h2>
-      <p class="welcome-desc">Markdown 阅读器 · 支持 LaTeX / Mermaid / TTS / 翻译</p>
+      <p class="welcome-desc">Markdown 阅读器 · 支持 LaTeX / Mermaid / TTS / 翻译 / WYSIWYG 编辑</p>
       <div class="welcome-actions">
         <button class="btn-primary btn-lg" id="welcomeOpenFile">📂 打开文件</button>
         <button class="btn-secondary btn-lg" id="welcomeOpenUrl">🔗 从 URL 打开</button>
       </div>
+      <div id="recentFilesPanel" class="recent-files-panel">
+        <div class="recent-files-title">最近打开</div>
+        <div id="recentFilesList" class="recent-files-list"></div>
+      </div>
       <div class="welcome-tips">
         <p>💡 拖拽 .md 文件到窗口打开</p>
         <p>💡 右键网页上的 .md 链接 → 用墨笺打开</p>
+        <p>💡 按 ? 键查看快捷键</p>
       </div>
     </div>
 
@@ -136,7 +198,12 @@
       <div id="content"></div>
     </div>
 
-    <!-- Edit Panel -->
+    <!-- WYSIWYG Panel -->
+    <div id="wysiwygPanel" class="wysiwyg-panel hidden">
+      <div id="wysiwygContent" contenteditable="true"></div>
+    </div>
+
+    <!-- Source Edit Panel -->
     <div id="editPanel" class="edit-panel hidden">
       <div id="cmEditor"></div>
     </div>
@@ -162,11 +229,20 @@
   <button class="btn-toolbar" id="tbBookmarkList" title="书签列表">📌</button>
   <button class="btn-toolbar" id="tbHighlights" title="高亮列表">⭐</button>
   <div class="tb-separator"></div>
-  <button class="btn-toolbar" id="tbEdit" title="编辑模式">✏️</button>
+  <!-- Mode buttons -->
+  <span class="tb-separator"></span>
+  <button class="btn-toolbar" id="tbModeRead" title="阅读模式">📖</button>
+  <button class="btn-toolbar" id="tbModeWysiwyg" title="所见即所得编辑">✏️</button>
+  <button class="btn-toolbar" id="tbModeSource" title="源码编辑">📝</button>
+  <span class="tb-separator"></span>
   <button class="btn-toolbar" id="tbFullscreen" title="全屏">⛶</button>
   <div class="tb-separator"></div>
   <button class="btn-toolbar" id="tbExport" title="导出">📥</button>
   <button class="btn-toolbar" id="tbTranslate" title="翻译选中文字">🌐</button>
+  <button class="btn-toolbar" id="tbShortcuts" title="快捷键">⌨️</button>
+  <button class="btn-toolbar" id="tbStats" title="文档统计">📊</button>
+  <span style="flex:1"></span>
+  <span id="statusBar" class="status-bar-text"></span>
 </div>
 
 <!-- ===== Debug Panel ===== -->
