@@ -7,7 +7,7 @@ const _debugLogs = [];
 function log(msg, level = 'I') {
   const t = new Date().toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0');
   _debugLogs.push({ t, msg, level });
-  console.log('[墨笺] ' + msg);
+  console.log('[InkNote] ' + msg);
   const body = document.getElementById('debugBody');
   if (body && body.style.display !== 'none') {
     const e = document.createElement('div');
@@ -89,7 +89,7 @@ function loadSettings() {
     document.getElementById('settingTtsVoice').value = s.ttsVoice || 'zh-CN-XiaoxiaoNeural';
     applyTheme(state.theme);
     applyFontSize(state.fontSize);
-  } catch(e) { logWarn('设置加载: ' + e.message); }
+  } catch(e) { logWarn(__('log.settings_load', {msg: e.message})); }
 }
 function saveSettings() {
   const s = {
@@ -101,7 +101,7 @@ function saveSettings() {
     ttsVoice: document.getElementById('settingTtsVoice').value,
   };
   localStorage.setItem('inknote_settings', JSON.stringify(s));
-  log('设置已保存');
+  log(__('log.settings_saved'));
 }
 
 // ==============================
@@ -169,7 +169,7 @@ function renderRecentFiles() {
   if (!list) return;
   list.innerHTML = '';
   if (recent.length === 0) {
-    list.innerHTML = '<div class="recent-file-empty">暂无最近文件</div>';
+    list.innerHTML = '<div class="recent-file-empty">' + __('recent_empty') + '</div>';
     return;
   }
   recent.forEach((r, i) => {
@@ -210,13 +210,13 @@ function updateFileInfo(content, name) {
   const sizeStr = content ? (content.length > 1024 ? (content.length/1024).toFixed(1) + ' KB' : content.length + ' B') : '';
   document.getElementById('fileInfoSize').textContent = sizeStr;
   const stats = countStats(content || '');
-  document.getElementById('fileInfoStats').textContent = '中文字 ' + stats.cnChars + ' · 英文词 ' + stats.enWords + ' · 段落 ' + stats.paras + ' · 行数 ' + stats.lines;
+  document.getElementById('fileInfoStats').textContent = __('label.file_info', {cn: stats.cnChars, en: stats.enWords, p: stats.paras, l: stats.lines});
   updateStatusBar(stats);
 }
 function updateStatusBar(stats) {
   const el = document.getElementById('statusBar');
   if (stats) {
-    el.textContent = stats.chars + ' 字 · ' + stats.paras + ' 段';
+    el.textContent = __('label.status_bar', {chars: stats.chars, paras: stats.paras});
   }
 }
 
@@ -233,15 +233,15 @@ function openLocalFile(file) {
     loadContent();
     addRecentFile(state.currentFileName, state.currentFilePath, state.currentContent);
     renderRecentFiles();
-    log('已打开文件: ' + file.name + ' (' + state.currentContent.length + ' 字符)');
+    log(__('log.opened_file', {name: file.name, chars: state.currentContent.length}));
   };
-  reader.onerror = function() { logError('读取文件失败'); };
+  reader.onerror = function() { logError(__('log.file_load_fail')); };
   reader.readAsText(file);
 }
 
 async function openUrl(url) {
   try {
-    log('正在从 URL 加载: ' + url);
+    log(__('log.opened_url', {url: url}));
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const text = await resp.text();
@@ -252,10 +252,10 @@ async function openUrl(url) {
     loadContent();
     addRecentFile(state.currentFileName, state.currentFilePath, state.currentContent);
     renderRecentFiles();
-    log('已加载 URL: ' + state.currentFileName + ' (' + text.length + ' 字符)');
+    log(__('log.loaded_url', {name: state.currentFileName, chars: text.length}));
   } catch(e) {
-    logError('URL 加载失败: ' + e.message);
-    alert('无法加载 URL: ' + e.message);
+    logError(__('log.url_load_fail', {msg: e.message}));
+    alert(__('log.url_load_fail', {msg: e.message}));
   }
 }
 
@@ -300,7 +300,7 @@ function renderMarkdown(rawMd) {
     });
     const html = marked.parse(preprocessed);
     document.getElementById('content').innerHTML = html;
-    log('渲染完成, HTML长度: ' + html.length);
+    log(__('log.rendered', {len: html.length}));
 
     // KaTeX math rendering
     try {
@@ -330,15 +330,15 @@ function renderMarkdown(rawMd) {
           if (el && el.textContent && el.textContent.trim()) {
             mermaid.render(item.id + '-' + Date.now(), el.textContent.trim())
               .then(function(result) { el.innerHTML = result.svg; })
-              .catch(function(e) { el.innerHTML = '<pre style="color:red;">Mermaid Error: ' + e.message + '</pre>'; });
+              .catch(function(e) { el.innerHTML = '<pre style="color:red;">Mermaid Error: ' + escapeHtml(e.message) + '</pre>'; });
           }
         });
       });
     }
     reapplyHighlightsAfterRender();
   } catch(e) {
-    document.getElementById('content').innerHTML = '<pre style="color:red;">渲染错误: ' + escapeHtml(e.message) + '</pre>';
-    logError('渲染错误: ' + e.message);
+    document.getElementById('content').innerHTML = '<pre style="color:red;">' + __('log.render_error', {msg: escapeHtml(e.message)}) + '</pre>';
+    logError(__('log.render_error', {msg: e.message}));
   }
 }
 
@@ -347,7 +347,7 @@ function renderMarkdown(rawMd) {
 // ==============================
 function enterWysiwyg() {
   if (state.editMode === 'wysiwyg') return;
-  log('[WYSIWYG] 进入所见即所得编辑模式');
+  log(__('log.wysiwyg_enter'));
 
   // Save source content from current mode
   if (state.editMode === 'source') {
@@ -371,12 +371,12 @@ function enterWysiwyg() {
   // Initialize undo stack
   wysiwygUndoStack = [html];
   wysiwygRedoStack = [];
-  log('[WYSIWYG] 撤消/重做已就绪');
+  log(__('log.wysiwyg_undo_ready'));
 }
 
 function leaveWysiwyg(applyChanges) {
   if (state.editMode !== 'wysiwyg') return;
-  log('[WYSIWYG] 离开编辑模式' + (applyChanges ? '（保存更改）' : ''));
+  log(__('log.wysiwyg_leave') + (applyChanges ? ' (' + __('log.wysiwyg_leave_save') + ')' : ''));
 
   if (applyChanges) {
     const html = document.getElementById('wysiwygContent').innerHTML;
@@ -396,7 +396,7 @@ function leaveWysiwyg(applyChanges) {
 
 function enterSourceEdit() {
   if (state.editMode === 'source') return;
-  log('[编辑] 进入源码编辑模式');
+  log(__('log.source_enter'));
 
   // Save content from WYSIWYG if coming from there
   if (state.editMode === 'wysiwyg') {
@@ -440,7 +440,7 @@ function markdownToHtml(md) {
     });
     return html;
   } catch(e) {
-    logWarn('MD→HTML: ' + e.message);
+    logWarn(__('log.md_to_html_fail', {msg: e.message}));
     return '<p>' + escapeHtml(md.substring(0, 200)) + '...</p>';
   }
 }
@@ -449,12 +449,12 @@ function htmlToMarkdown(html) {
   try {
     if (typeof turndownService === 'undefined') {
       // Fallback: use text content
-      logWarn('Turndown 未加载，使用纯文本回退');
+      logWarn(__('log.turndown_fallback'));
       return htmlToText(html);
     }
     return turndownService.turndown(html);
   } catch(e) {
-    logWarn('HTML→MD: ' + e.message);
+    logWarn(__('log.html_to_md_fail', {msg: e.message}));
     return htmlToText(html);
   }
 }
@@ -504,9 +504,9 @@ try {
         return md;
       }
     });
-    log('[Turndown] HTML→MD 转换器已就绪');
+    log(__('log.turndown_ready'));
   }
-} catch(e) { logWarn('Turndown 初始化失败: ' + e.message); }
+} catch(e) { logWarn(__('log.turndown_fail', {msg: e.message})); }
 
 // WYSIWYG formatting commands
 function wysiwygCommand(cmd) {
@@ -531,12 +531,12 @@ function wysiwygCommand(cmd) {
         document.execCommand('insertHTML', false, '<pre><code>' + escapeHtml(selText) + '</code></pre>');
       } else {
         // Insert code block
-        document.execCommand('insertHTML', false, '<pre><code>代码</code></pre>');
+        document.execCommand('insertHTML', false, '<pre><code>' + __('code_placeholder') + '</code></pre>');
       }
       break;
     }
     case 'link': {
-      const url = prompt('输入链接 URL:', 'https://');
+      const url = prompt(__('translate_prompt'), 'https://');
       if (url) document.execCommand('createLink', false, url);
       break;
     }
@@ -550,7 +550,7 @@ function wysiwygCommand(cmd) {
 // Mode Switching
 // ==============================
 function setMode(mode) {
-  log('切换模式: ' + mode);
+  log(__('log.mode_switch', {mode: mode}));
   if (mode === 'read') {
     if (state.editMode === 'wysiwyg') leaveWysiwyg(true);
     else if (state.editMode === 'source') {
@@ -584,7 +584,7 @@ function toggleFullscreen() {
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen().then(function() {
       state.isFullscreen = true;
-    }).catch(function(e) { logWarn('全屏: ' + e.message); });
+    }).catch(function(e) { logWarn(__('log.fullscreen_fail', {msg: e.message})); });
   } else {
     document.exitFullscreen().then(function() {
       state.isFullscreen = false;
@@ -642,7 +642,7 @@ function doSearch(query) {
     highlightTextRange(textNodes, offsets, ms, me);
   }
   state.searchMatches.reverse();
-  document.getElementById('searchInfo').textContent = allMatches.length + ' 个';
+  document.getElementById('searchInfo').textContent = __('label.search_info_count', {n: allMatches.length});
   highlightSearchMatch(0);
 }
 function highlightTextRange(textNodes, offsets, start, end) {
@@ -675,7 +675,7 @@ function highlightSearchMatch(index) {
     state.searchCurrentIdx = index;
     state.searchMatches[index].className = 'search-match-active';
     state.searchMatches[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    document.getElementById('searchInfo').textContent = (index+1) + '/' + state.searchMatches.length;
+    document.getElementById('searchInfo').textContent = __('label.search_info_pos', {cur: index+1, total: state.searchMatches.length});
   }
 }
 function nextSearch() { highlightSearchMatch((state.searchCurrentIdx + 1) % state.searchMatches.length); }
@@ -701,7 +701,7 @@ function buildToc() {
   const container = document.getElementById('tocItems');
   const headings = state.currentContent.match(/^#{1,6}\s+.+$/gm);
   container.innerHTML = '';
-  if (!headings) { container.innerHTML = '<div class="list-empty">暂无标题</div>'; return; }
+  if (!headings) { container.innerHTML = '<div class="list-empty">' + __('toc_empty') + '</div>'; return; }
   headings.forEach(function(h) {
     const level = (h.match(/^#+/) || [''])[0].length;
     const title = h.replace(/^#+\s*/, '');
@@ -749,18 +749,18 @@ function addBookmark() {
   const bm = getBookmarks();
   bm.push({ idx: closestIdx, snippet: snippet, time: Date.now() });
   saveBookmarks(bm);
-  log('书签已添加: #' + closestIdx);
+  log(__('log.bookmark_added', {idx: closestIdx}));
   highlightAndScroll(closestIdx);
 }
 function loadBookmarksForFile() {
-  log('书签: ' + getBookmarks().length + ' 条');
+  log(__('log.bookmark_count', {n: getBookmarks().length}));
 }
 function showBookmarks() {
   const bm = getBookmarks();
   const list = document.getElementById('bookmarkList');
   list.innerHTML = '';
   if (bm.length === 0) {
-    list.innerHTML = '<div class="list-empty">暂无书签<br><span style="font-size:12px;color:#aaa;">滚动到目标段落，点击 🔖 添加</span></div>';
+    list.innerHTML = '<div class="list-empty">' + __('bookmark_empty') + '<br><span style="font-size:12px;color:#aaa;">' + __('bookmark_hint') + '</span></div>';
   } else {
     bm.forEach(function(b, i) {
       const item = document.createElement('div');
@@ -836,7 +836,7 @@ function applyHighlight(paraIdx, startOffset, endOffset, color) {
     span.className = 'user-highlight';
     span.appendChild(frag);
     range.insertNode(span);
-  } catch(e) { logWarn('高亮: ' + e.message); }
+  } catch(e) { logWarn(__('log.highlight_warn', {msg: e.message})); }
 }
 function removeHighlightByRange(paraIdx, startOffset, endOffset) {
   const all = document.getElementById('content').querySelectorAll('p, h1, h2, h3, h4, h5, h6, pre, blockquote, li');
@@ -852,7 +852,7 @@ function showHighlights() {
   const hls = getHighlights();
   const list = document.getElementById('highlightList');
   list.innerHTML = '';
-  if (hls.length === 0) { list.innerHTML = '<div class="list-empty">暂无高亮</div>'; }
+  if (hls.length === 0) { list.innerHTML = '<div class="list-empty">' + __('highlight_empty') + '</div>'; }
   else {
     hls.forEach(function(h, i) {
       const item = document.createElement('div');
@@ -996,13 +996,13 @@ function getCleanText(text) {
 }
 function startTts() {
   const paraText = JSON.parse(getParagraphsText());
-  if (paraText.length === 0) { log('TTS: 无段落'); return; }
+  if (paraText.length === 0) { log(__('log.tts_empty')); return; }
   state.ttsParagraphs = paraText.map(function(t) { return getCleanText(t); });
   state.ttsCurrentIdx = 0;
   state.isTtsPlaying = true;
   document.getElementById('tbTts').style.display = 'none';
   document.getElementById('tbTtsStop').style.display = '';
-  log('TTS 开始, ' + paraText.length + ' 段');
+  log(__('log.tts_start', {n: paraText.length}));
   playNext(0);
 }
 function stopTts() {
@@ -1013,7 +1013,7 @@ function stopTts() {
   document.getElementById('tbTts').style.display = '';
   document.getElementById('tbTtsStop').style.display = 'none';
   clearTtsHighlight();
-  log('TTS 已停止');
+  log(__('log.tts_stop'));
 }
 function playNext(idx) {
   if (idx >= state.ttsParagraphs.length) { stopTts(); return; }
@@ -1076,11 +1076,11 @@ function doTranslate(text) {
   const apiKey = settings.apiKey;
   const model = settings.apiModel || 'deepseek-chat';
   if (!apiKey) {
-    alert('请先设置翻译 API Key（⚙️ 设置）');
+    alert(__('log.translate_api_needed'));
     document.getElementById('settingsOverlay').classList.add('show');
     return;
   }
-  log('翻译: ' + text.substring(0, 50) + '...');
+  log(__('log.translate', {text: text.substring(0, 50)}));
   fetch(endpoint, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
     body: JSON.stringify({
@@ -1097,8 +1097,8 @@ function doTranslate(text) {
     document.getElementById('translateResult').textContent = result;
     document.getElementById('translateOverlay').classList.add('show');
   }).catch(function(err) {
-    logError('翻译失败: ' + err.message);
-    document.getElementById('translateResult').textContent = '翻译失败: ' + err.message;
+    logError(__('log.translate_fail', {msg: err.message}));
+    document.getElementById('translateResult').textContent = __('log.translate_fail', {msg: err.message});
     document.getElementById('translateOverlay').classList.add('show');
   });
 }
@@ -1108,12 +1108,12 @@ function closeTranslateResult() { document.getElementById('translateOverlay').cl
 // Export
 // ==============================
 function showExportMenu() {
-  const choice = confirm('导出格式:\n确定 → HTML\n取消 → 复制 Markdown');
+  const choice = confirm(__('export_confirm'));
   if (choice) {
     exportHtml();
   } else {
     navigator.clipboard.writeText(state.currentContent).then(function() {
-      log('Markdown 已复制');
+      log(__('log.export_md'));
     }).catch(function() {});
   }
 }
@@ -1132,7 +1132,7 @@ function exportHtml() {
   a.download = state.currentFileName.replace(/\.\w+$/, '') + '.html';
   a.click();
   URL.revokeObjectURL(blob);
-  log('HTML 已导出');
+  log(__('log.export_html'));
 }
 
 // ==============================
@@ -1140,15 +1140,15 @@ function exportHtml() {
 // ==============================
 function exportPdf() {
   if (!state.currentContent) {
-    log('PDF: 无内容可导出');
+    log(__('log.export_pdf_empty'));
     return;
   }
-  log('正在生成 PDF…');
+  log(__('log.export_pdf_start'));
   document.body.classList.add('printing');
   window.print();
   setTimeout(function() {
     document.body.classList.remove('printing');
-    log('PDF 导出完成');
+    log(__('log.export_pdf_done'));
   }, 1000);
 }
 
@@ -1221,7 +1221,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('tbTranslate').addEventListener('click', function() {
     const s = window.getSelection();
     if (s && s.toString().trim()) doTranslate(s.toString());
-    else log('翻译: 请先选中文字');
+    else log(__('log.translate_no_sel'));
   });
 
   // Shortcuts help
@@ -1251,12 +1251,12 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   document.getElementById('debugCopy').addEventListener('click', function() {
     const text = _debugLogs.map(function(e) { return e.t + ' [' + e.level + '] ' + e.msg; }).join('\n');
-    navigator.clipboard.writeText(text).then(function() { log('日志已复制'); }).catch(function() {});
+    navigator.clipboard.writeText(text).then(function() { log(__('log.copy_done')); }).catch(function() {});
   });
   document.getElementById('debugClear').addEventListener('click', function() {
     _debugLogs.length = 0;
     document.getElementById('debugBody').innerHTML = '';
-    log('日志已清空');
+    log(__('log.clear_done'));
   });
 
   // WYSIWYG formatting toolbar
@@ -1270,8 +1270,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // WYSIWYG table/image/hr commands
   document.querySelectorAll('.btn-wysiwyg[data-cmd="table"]').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      const rows = parseInt(prompt('表格行数:', '3')) || 3;
-      const cols = parseInt(prompt('表格列数:', '4')) || 4;
+      const rows = parseInt(prompt(__('table_rows_prompt'), '3')) || 3;
+      const cols = parseInt(prompt(__('table_cols_prompt'), '4')) || 4;
       if (rows > 0 && cols > 0) wysiwygInsertTable(rows, cols);
     });
   });
@@ -1356,12 +1356,58 @@ document.addEventListener('DOMContentLoaded', function() {
   if (urlParam) openUrl(urlParam);
   else if (textParam) {
     state.currentContent = textParam;
-    state.currentFileName = '选中文本.md';
+    state.currentFileName = __('app.untitled') + '.md';
     loadContent();
   }
 
-  log('墨笺 InkNote v2.0 已启动');
-  log('💡 按 ? 查看快捷键');
+  log(__('log.startup'));
+  log(__('log.shortcut_hint'));
+
+  // Language switcher
+  window._onLangChange = function() {
+    if (window.state && window.state.currentContent) {
+      updateFileInfo(window.state.currentContent, window.state.currentFileName);
+    }
+    renderRecentFiles();
+    if (window.state && state.searchMatches.length > 0) {
+      document.getElementById('searchInfo').textContent = __('label.search_info_count', {n: state.searchMatches.length});
+    }
+    // Re-translate options
+    document.querySelectorAll('#settingTtsVoice option').forEach(function(opt) {
+      if (opt.dataset.i18n) opt.textContent = __(opt.dataset.i18n);
+    });
+  };
+  document.querySelectorAll('.btn-lang').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      setLang(this.dataset.lang);
+    });
+  });
+  // Highlight current lang button
+  document.querySelectorAll('.btn-lang[data-lang="' + getLang() + '"]').forEach(function(btn) {
+    btn.style.borderColor = '#1a73e8';
+    btn.style.color = '#1a73e8';
+    btn.style.fontWeight = 'bold';
+  });
+  window.setLang = function(lang) {
+    var oldLang = getLang();
+    if (typeof window._tSetLang !== 'undefined') _tSetLang(lang);
+    else setLang(lang);
+    document.querySelectorAll('.btn-lang').forEach(function(b) {
+      b.style.borderColor = '#ddd';
+      b.style.color = '';
+      b.style.fontWeight = '';
+    });
+    document.querySelectorAll('.btn-lang[data-lang="' + getLang() + '"]').forEach(function(b) {
+      b.style.borderColor = '#1a73e8';
+      b.style.color = '#1a73e8';
+      b.style.fontWeight = 'bold';
+    });
+  };
+  // Handle lang URL param
+  var langParam = params.get('lang');
+  if (langParam && (langParam === 'zh' || langParam === 'en')) {
+    window.setLang(langParam);
+  }
 });
 
 // ==============================
@@ -1388,7 +1434,7 @@ document.addEventListener('drop', function(e) {
     if (file.name.match(/\.(md|markdown|txt|html?)$/i)) {
       openLocalFile(file);
     } else {
-      logWarn('不支持的格式: ' + file.name);
+      logWarn(__('log.unsupported_format', {name: file.name}));
     }
   } else {
     const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
@@ -1416,24 +1462,24 @@ function showStats() {
 
   const total = stats.chars + enWords;
   const msg = [
-    '📊 文档统计',
+    __('stats.header'),
     '─────────────',
-    '总字符（含空格）: ' + stats.chars,
-    '中文字符: ' + cnChars,
-    '英文单词: ' + enWords,
-    '数字: ' + numbers,
-    '标点符号: ' + puncts,
+    __('stats.total_chars', {n: stats.chars}),
+    __('stats.cn_chars', {n: cnChars}),
+    __('stats.en_words', {n: enWords}),
+    __('stats.numbers', {n: numbers}),
+    __('stats.punct', {n: puncts}),
     '─────────────',
-    '段落数: ' + stats.paras,
-    '总行数: ' + stats.lines,
-    '代码块: ' + codeBlocks,
-    '公式: ' + formulas,
-    '图片: ' + images,
-    '链接: ' + links,
-    '标题: ' + headings,
-    '表格行: ' + tables,
+    __('stats.paras', {n: stats.paras}),
+    __('stats.lines', {n: stats.lines}),
+    __('stats.code_blocks', {n: codeBlocks}),
+    __('stats.formulas', {n: formulas}),
+    __('stats.images', {n: images}),
+    __('stats.links', {n: links}),
+    __('stats.headings', {n: headings}),
+    __('stats.table_rows', {n: tables}),
     '─────────────',
-    '预估阅读时间: ' + Math.max(1, Math.round(total / 500)) + ' 分钟（500字/分钟）',
+    __('stats.read_time', {n: Math.max(1, Math.round(total / 500))}),
   ].join('\n');
   alert(msg);
 }
@@ -1487,7 +1533,7 @@ function wysiwygUndo() {
   // Restore previous state
   el.innerHTML = wysiwygUndoStack[wysiwygUndoStack.length - 1];
   el.focus();
-  log('[撤销]');
+  log(__('log.undo'));
 }
 
 function wysiwygRedo() {
@@ -1498,7 +1544,7 @@ function wysiwygRedo() {
   wysiwygUndoStack.push(state);
   el.innerHTML = state;
   el.focus();
-  log('[重做]');
+  log(__('log.redo'));
 }
 function saveSelection() {
   const sel = window.getSelection();
@@ -1514,7 +1560,7 @@ function restoreSelection() {
 }
 
 function wysiwygInsertImage() {
-  const url = prompt('输入图片 URL:', 'https://');
+  const url = prompt(__('image_url_prompt'), 'https://');
   if (!url) return;
   saveSelection();
   const img = document.createElement('img');
@@ -1566,13 +1612,13 @@ function startAutoSave() {
       const md = htmlToMarkdown(html);
       if (md !== state.currentContent) {
         state.currentContent = md;
-        log('[自动保存] 内容已保存');
+        log(__('log.auto_save'));
       }
     } else if (state.editMode === 'source') {
       const ta = document.getElementById('sourceTextarea');
       if (ta && ta.value !== state.currentContent) {
         state.currentContent = ta.value;
-        log('[自动保存] 内容已保存');
+        log(__('log.auto_save'));
       }
     }
   }, 30000);
@@ -1584,14 +1630,14 @@ function stopAutoSave() {
 // Export Logs
 // ==============================
 function exportLogs() {
-  var text = '===== 墨笺 InkNote 调试日志 =====\n';
-  text += '时间: ' + new Date().toLocaleString('zh-CN') + '\n';
-  text += '版本: v2.0\n';
-  text += '文件: ' + (state.currentFileName || '无') + '\n';
-  text += '模式: ' + state.editMode + '\n';
-  text += '主题: ' + state.theme + '\n';
-  text += '行数: ' + state.currentContent.split('\n').length + '\n';
-  text += '状态: ' + (state.isTtsPlaying ? '朗读中' : '正常') + '\n';
+  var text = __('export_log.header') + '\n';
+  text += __('export_log.time', {time: new Date().toLocaleString('zh-CN')}) + '\n';
+  text += __('export_log.version') + '\n';
+  text += __('export_log.file', {name: state.currentFileName || __('no_file')}) + '\n';
+  text += __('export_log.mode', {mode: state.editMode}) + '\n';
+  text += __('export_log.theme', {theme: state.theme}) + '\n';
+  text += __('export_log.lines', {n: state.currentContent.split('\n').length}) + '\n';
+  text += __('export_log.status', {status: state.isTtsPlaying ? __('export_log.status_tts') : __('export_log.status_normal')}) + '\n';
   text += '================================\n\n';
   _debugLogs.forEach(function(e) {
     text += e.t + ' [' + e.level + '] ' + e.msg + '\n';
@@ -1602,7 +1648,7 @@ function exportLogs() {
   a.download = 'inknote-log-' + new Date().toISOString().slice(0, 19).replace(/[:-]/g, '') + '.txt';
   a.click();
   URL.revokeObjectURL(blob);
-  log('日志已导出 (' + _debugLogs.length + ' 条)');
+  log(__('log.export_log', {n: _debugLogs.length}));
 }
 
 function scrollPage(direction) {

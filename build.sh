@@ -36,10 +36,13 @@ cp background.js "$BUILD_DIR/"
 cp reader.html "$BUILD_DIR/"
 cp reader.js "$BUILD_DIR/"
 cp styles.css "$BUILD_DIR/"
+cp lang.js "$BUILD_DIR/"
 mkdir -p "$BUILD_DIR/icons"
 cp icons/*.png "$BUILD_DIR/icons/"
 mkdir -p "$BUILD_DIR/lib"
 cp lib/* "$BUILD_DIR/lib/"
+mkdir -p "$BUILD_DIR/locales"
+cp locales/*.json "$BUILD_DIR/locales/"
 
 echo "✅ 文件已复制到 $BUILD_DIR"
 

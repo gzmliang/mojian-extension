@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>墨笺 InkNote</title>
+<title data-i18n="app.title">墨笺 InkNote</title>
 
 <!-- Local libraries -->
 <script src="lib/marked.min.js"></script>
@@ -20,15 +20,21 @@
 <!-- ===== Header ===== -->
 <header id="app-header">
   <div class="header-left">
-    <span class="app-logo">◇ 墨笺</span>
-    <span class="file-name" id="fileName">未打开文件</span>
+    <span class="app-logo">◇ <span data-i18n="app.name">墨笺InkNote</span></span>
+    <span class="file-name" id="fileName" data-i18n="no_file">未打开文件</span>
   </div>
   <div class="header-right">
-    <button class="btn-icon" id="btnOpenFile" title="打开文件">📂</button>
-    <button class="btn-icon" id="btnOpenUrl" title="从 URL 打开">🔗</button>
-    <button class="btn-icon" id="btnSettings" title="设置">⚙️</button>
+    <button class="btn-icon" id="btnOpenFile" data-i18n-title="btn.open_file" title="打开文件">📂</button>
+    <button class="btn-icon" id="btnOpenUrl" data-i18n-title="btn.open_url" title="从 URL 打开">🔗</button>
+    <button class="btn-icon" id="btnSettings" data-i18n-title="btn.settings" title="设置">⚙️</button>
   </div>
 </header>
+
+<!-- ===== Language Switcher ===== -->
+<div id="langSwitcher" style="position:fixed;top:50px;right:14px;z-index:1000;display:flex;gap:4px;">
+  <button class="btn-lang" data-lang="zh" style="font-size:11px;padding:2px 6px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;">中文</button>
+  <button class="btn-lang" data-lang="en" style="font-size:11px;padding:2px 6px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;">EN</button>
+</div>
 
 <!-- ===== File Info Bar ===== -->
 <div id="fileInfoBar" class="file-info-bar hidden">
@@ -41,38 +47,38 @@
 
 <!-- ===== WYSIWYG Formatting Toolbar ===== -->
 <div id="wysiwygToolbar" class="wysiwyg-toolbar hidden">
-  <button class="btn-wysiwyg" data-cmd="bold" title="粗体 Ctrl+B"><b>B</b></button>
-  <button class="btn-wysiwyg" data-cmd="italic" title="斜体 Ctrl+I"><i>I</i></button>
-  <button class="btn-wysiwyg" data-cmd="underline" title="下划线 Ctrl+U"><u>U</u></button>
+  <button class="btn-wysiwyg" data-cmd="bold" data-i18n-title="wysiwyg.bold" title="粗体 Ctrl+B"><b>B</b></button>
+  <button class="btn-wysiwyg" data-cmd="italic" data-i18n-title="wysiwyg.italic" title="斜体 Ctrl+I"><i>I</i></button>
+  <button class="btn-wysiwyg" data-cmd="underline" data-i18n-title="wysiwyg.underline" title="下划线 Ctrl+U"><u>U</u></button>
   <span class="wysiwyg-sep"></span>
-  <button class="btn-wysiwyg" data-cmd="heading1" title="标题1">H1</button>
-  <button class="btn-wysiwyg" data-cmd="heading2" title="标题2">H2</button>
-  <button class="btn-wysiwyg" data-cmd="heading3" title="标题3">H3</button>
+  <button class="btn-wysiwyg" data-cmd="heading1" data-i18n-title="wysiwyg.heading1" title="标题1">H1</button>
+  <button class="btn-wysiwyg" data-cmd="heading2" data-i18n-title="wysiwyg.heading2" title="标题2">H2</button>
+  <button class="btn-wysiwyg" data-cmd="heading3" data-i18n-title="wysiwyg.heading3" title="标题3">H3</button>
   <span class="wysiwyg-sep"></span>
-  <button class="btn-wysiwyg" data-cmd="unorderedList" title="无序列表">•</button>
-  <button class="btn-wysiwyg" data-cmd="orderedList" title="有序列表">1.</button>
-  <button class="btn-wysiwyg" data-cmd="blockquote" title="引用">❝</button>
-  <button class="btn-wysiwyg" data-cmd="code" title="代码块">&lt;/&gt;</button>
-  <button class="btn-wysiwyg" data-cmd="link" title="链接">🔗</button>
-  <button class="btn-wysiwyg" data-cmd="image" title="图片">🖼</button>
-  <button class="btn-wysiwyg" data-cmd="table" title="表格">⊞</button>
-  <button class="btn-wysiwyg" data-cmd="hr" title="分隔线">―</button>
+  <button class="btn-wysiwyg" data-cmd="unorderedList" data-i18n-title="wysiwyg.list_unordered" title="无序列表">•</button>
+  <button class="btn-wysiwyg" data-cmd="orderedList" data-i18n-title="wysiwyg.list_ordered" title="有序列表">1.</button>
+  <button class="btn-wysiwyg" data-cmd="blockquote" data-i18n-title="wysiwyg.blockquote" title="引用">❝</button>
+  <button class="btn-wysiwyg" data-cmd="code" data-i18n-title="wysiwyg.code" title="代码块">&lt;/&gt;</button>
+  <button class="btn-wysiwyg" data-cmd="link" data-i18n-title="wysiwyg.link" title="链接">🔗</button>
+  <button class="btn-wysiwyg" data-cmd="image" data-i18n-title="wysiwyg.image" title="图片">🖼</button>
+  <button class="btn-wysiwyg" data-cmd="table" data-i18n-title="wysiwyg.table" title="表格">⊞</button>
+  <button class="btn-wysiwyg" data-cmd="hr" data-i18n-title="wysiwyg.hr" title="分隔线">―</button>
   <span class="wysiwyg-sep"></span>
-  <button class="btn-wysiwyg" data-cmd="undo" title="撤销 ↩">↩</button>
-  <button class="btn-wysiwyg" data-cmd="redo" title="重做 ↪">↪</button>
+  <button class="btn-wysiwyg" data-cmd="undo" data-i18n-title="wysiwyg.undo" title="撤销 ↩">↩</button>
+  <button class="btn-wysiwyg" data-cmd="redo" data-i18n-title="wysiwyg.redo" title="重做 ↪">↪</button>
 </div>
 
 <!-- ===== URL Dialog ===== -->
 <div class="overlay" id="urlOverlay">
   <div class="dialog">
     <div class="dialog-header">
-      <span>从 URL 打开</span>
+      <span data-i18n="dialog.url_title">从 URL 打开</span>
       <button class="btn-icon" data-action="closeUrlDialog">✕</button>
     </div>
-    <input type="url" id="urlInput" placeholder="输入 Markdown 文件 URL（支持 GitHub raw）" class="dialog-input">
+    <input type="url" id="urlInput" data-i18n="dialog.url_placeholder" placeholder="输入 Markdown 文件 URL（支持 GitHub raw）" class="dialog-input">
     <div class="dialog-actions">
-      <button class="btn-secondary" data-action="closeUrlDialog">取消</button>
-      <button class="btn-primary" id="btnUrlConfirm">打开</button>
+      <button class="btn-secondary" data-action="closeUrlDialog" data-i18n="btn.cancel">取消</button>
+      <button class="btn-primary" id="btnUrlConfirm" data-i18n="btn.confirm_open">打开</button>
     </div>
   </div>
 </div>
@@ -81,48 +87,48 @@
 <div class="overlay" id="settingsOverlay">
   <div class="dialog dialog-wide">
     <div class="dialog-header">
-      <span>设置</span>
+      <span data-i18n="dialog.settings_title">设置</span>
       <button class="btn-icon" data-action="closeSettings">✕</button>
     </div>
     <div class="settings-body">
       <div class="settings-section">
-        <div class="settings-label">翻译 API</div>
+        <div class="settings-label" data-i18n="settings.translate_api">翻译 API</div>
         <div class="settings-row">
-          <label>API 端点</label>
+          <label data-i18n="settings.api_endpoint">API 端点</label>
           <input type="text" id="settingApiEndpoint" placeholder="https://api.deepseek.com/v1/chat/completions">
         </div>
         <div class="settings-row">
-          <label>API Key</label>
+          <label data-i18n="settings.api_key">API Key</label>
           <input type="password" id="settingApiKey" placeholder="sk-...">
         </div>
         <div class="settings-row">
-          <label>模型</label>
+          <label data-i18n="settings.api_model">模型</label>
           <input type="text" id="settingApiModel" placeholder="deepseek-chat">
         </div>
       </div>
       <div class="settings-section">
-        <div class="settings-label">Edge TTS</div>
+        <div class="settings-label" data-i18n="settings.tts">Edge TTS</div>
         <div class="settings-row">
-          <label>服务器地址</label>
+          <label data-i18n="settings.tts_endpoint">服务器地址</label>
           <input type="text" id="settingTtsEndpoint" placeholder="http://powerplus.blogsyte.com:5001">
         </div>
         <div class="settings-row">
-          <label>语音</label>
+          <label data-i18n="settings.tts_voice">语音</label>
           <select id="settingTtsVoice">
-            <option value="zh-CN-XiaoxiaoNeural">Xiaoxiao (女)</option>
-            <option value="zh-CN-YunxiNeural">Yunxi (男)</option>
-            <option value="zh-CN-XiaohanNeural">Xiaohan (女-温暖)</option>
-            <option value="zh-CN-YunjianNeural">Yunjian (男-成熟)</option>
-            <option value="en-US-AriaNeural">Aria (美式英语女)</option>
-            <option value="en-US-GuyNeural">Guy (美式英语男)</option>
-            <option value="ja-JP-NanamiNeural">Nanami (日语女)</option>
+            <option value="zh-CN-XiaoxiaoNeural" data-i18n="settings.voice_xiaoxiao">Xiaoxiao (女)</option>
+            <option value="zh-CN-YunxiNeural" data-i18n="settings.voice_yunxi">Yunxi (男)</option>
+            <option value="zh-CN-XiaohanNeural" data-i18n="settings.voice_xiaohan">Xiaohan (女-温暖)</option>
+            <option value="zh-CN-YunjianNeural" data-i18n="settings.voice_yunjian">Yunjian (男-成熟)</option>
+            <option value="en-US-AriaNeural" data-i18n="settings.voice_aria">Aria (美式英语女)</option>
+            <option value="en-US-GuyNeural" data-i18n="settings.voice_guy">Guy (美式英语男)</option>
+            <option value="ja-JP-NanamiNeural" data-i18n="settings.voice_nanami">Nanami (日语女)</option>
           </select>
         </div>
       </div>
     </div>
     <div class="dialog-actions">
-      <button class="btn-secondary" data-action="closeSettings">取消</button>
-      <button class="btn-primary" id="btnSettingsSave">保存</button>
+      <button class="btn-secondary" data-action="closeSettings" data-i18n="btn.cancel">取消</button>
+      <button class="btn-primary" id="btnSettingsSave" data-i18n="btn.save">保存</button>
     </div>
   </div>
 </div>
@@ -131,22 +137,22 @@
 <div class="overlay" id="shortcutsOverlay">
   <div class="dialog">
     <div class="dialog-header">
-      <span>键盘快捷键</span>
+      <span data-i18n="dialog.shortcuts_title">键盘快捷键</span>
       <button class="btn-icon" data-action="closeShortcuts">✕</button>
     </div>
     <div class="dialog-body shortcuts-list">
-      <div class="shortcut-row"><kbd>Ctrl+F</kbd><span>搜索文档</span></div>
-      <div class="shortcut-row"><kbd>Ctrl+B</kbd><span>粗体 (WYSIWYG)</span></div>
-      <div class="shortcut-row"><kbd>Ctrl+I</kbd><span>斜体 (WYSIWYG)</span></div>
-      <div class="shortcut-row"><kbd>Ctrl+U</kbd><span>下划线 (WYSIWYG)</span></div>
-      <div class="shortcut-row"><kbd>Ctrl+Z</kbd><span>撤销 (WYSIWYG)</span></div>
-      <div class="shortcut-row"><kbd>Ctrl+Shift+Z</kbd><span>重做 (WYSIWYG)</span></div>
-      <div class="shortcut-row"><kbd>Ctrl+S</kbd><span>保存编辑 → 切换阅读</span></div>
-      <div class="shortcut-row"><kbd>Ctrl+E</kbd><span>切换编辑模式</span></div>
-      <div class="shortcut-row"><kbd>j / ↓</kbd><span>向下翻页</span></div>
-      <div class="shortcut-row"><kbd>k / ↑</kbd><span>向上翻页</span></div>
-      <div class="shortcut-row"><kbd>Esc</kbd><span>关闭弹窗 / 搜索</span></div>
-      <div class="shortcut-row"><kbd>?</kbd><span>打开本帮助</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+F</kbd><span data-i18n="shortcut.search">搜索文档</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+B</kbd><span data-i18n="shortcut.bold">粗体 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+I</kbd><span data-i18n="shortcut.italic">斜体 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+U</kbd><span data-i18n="shortcut.underline">下划线 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+Z</kbd><span data-i18n="shortcut.undo">撤销 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+Shift+Z</kbd><span data-i18n="shortcut.redo">重做 (WYSIWYG)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+S</kbd><span data-i18n="shortcut.save">保存编辑 → 切换阅读</span></div>
+      <div class="shortcut-row"><kbd>Ctrl+E</kbd><span data-i18n="shortcut.toggle_edit">切换编辑模式</span></div>
+      <div class="shortcut-row"><kbd>j / ↓</kbd><span data-i18n="shortcut.page_down">向下翻页</span></div>
+      <div class="shortcut-row"><kbd>k / ↑</kbd><span data-i18n="shortcut.page_up">向上翻页</span></div>
+      <div class="shortcut-row"><kbd>Esc</kbd><span data-i18n="shortcut.close">关闭弹窗 / 搜索</span></div>
+      <div class="shortcut-row"><kbd>?</kbd><span data-i18n="shortcut.help">打开本帮助</span></div>
     </div>
   </div>
 </div>
@@ -156,7 +162,7 @@
   <!-- TOC Sidebar -->
   <aside id="tocSidebar" class="sidebar hidden">
     <div class="sidebar-header">
-      <span>大纲目录</span>
+      <span data-i18n="dialog.shortcuts_title">大纲目录</span>
       <button class="btn-icon" id="btnTocClose">✕</button>
     </div>
     <div id="tocItems" class="sidebar-body"></div>
@@ -166,30 +172,30 @@
   <main id="readerMain">
     <!-- Search Bar -->
     <div id="searchBar" class="search-bar hidden">
-      <input type="text" id="searchInput" placeholder="搜索文档…" autocomplete="off">
+      <input type="text" id="searchInput" data-i18n="search_placeholder" placeholder="搜索文档…" autocomplete="off">
       <span id="searchInfo" class="search-info"></span>
-      <button class="btn-icon-sm" id="searchPrev" title="上一个">▲</button>
-      <button class="btn-icon-sm" id="searchNext" title="下一个">▼</button>
-      <button class="btn-icon-sm" id="searchClose" title="关闭">✕</button>
+      <button class="btn-icon-sm" id="searchPrev" data-i18n-title="search_prev_title" title="上一个">▲</button>
+      <button class="btn-icon-sm" id="searchNext" data-i18n-title="search_next_title" title="下一个">▼</button>
+      <button class="btn-icon-sm" id="searchClose" data-i18n-title="search_close_title" title="关闭">✕</button>
     </div>
 
     <!-- Welcome / Content -->
     <div id="welcomeScreen" class="welcome">
       <div class="welcome-icon">◇</div>
-      <h2>墨笺 InkNote</h2>
-      <p class="welcome-desc">Markdown 阅读器 · 支持 LaTeX / Mermaid / TTS / 翻译 / WYSIWYG 编辑</p>
+      <h2 data-i18n="app.title">墨笺 InkNote</h2>
+      <p class="welcome-desc" data-i18n="app.tagline">Markdown 阅读器 · 支持 LaTeX / Mermaid / TTS / 翻译 / WYSIWYG 编辑</p>
       <div class="welcome-actions">
-        <button class="btn-primary btn-lg" id="welcomeOpenFile">📂 打开文件</button>
-        <button class="btn-secondary btn-lg" id="welcomeOpenUrl">🔗 从 URL 打开</button>
+        <button class="btn-primary btn-lg" id="welcomeOpenFile" data-i18n="btn.open_file">📂 打开文件</button>
+        <button class="btn-secondary btn-lg" id="welcomeOpenUrl" data-i18n="btn.open_url">🔗 从 URL 打开</button>
       </div>
       <div id="recentFilesPanel" class="recent-files-panel">
-        <div class="recent-files-title">最近打开</div>
+        <div class="recent-files-title" data-i18n="label.recent_files">最近打开</div>
         <div id="recentFilesList" class="recent-files-list"></div>
       </div>
       <div class="welcome-tips">
-        <p>💡 拖拽 .md 文件到窗口打开</p>
-        <p>💡 右键网页上的 .md 链接 → 用墨笺打开</p>
-        <p>💡 按 ? 键查看快捷键</p>
+        <p data-i18n="welcome_tip_drag">💡 拖拽 .md 文件到窗口打开</p>
+        <p data-i18n="welcome_tip_context">💡 右键网页上的 .md 链接 → 用墨笺打开</p>
+        <p data-i18n="welcome_tip_shortcut">💡 按 ? 键查看快捷键</p>
       </div>
     </div>
 
@@ -212,37 +218,36 @@
 
 <!-- ===== Floating Toolbar (bottom) ===== -->
 <div id="floatingToolbar" class="floating-toolbar hidden">
-  <button class="btn-toolbar" id="tbTheme" title="主题切换">🎨</button>
+  <button class="btn-toolbar" id="tbTheme" data-i18n-title="toolbar.theme" title="主题切换">🎨</button>
   <div class="tb-separator"></div>
   <div class="tb-font-group">
-    <button class="btn-toolbar" id="tbFontDec" title="缩小字体">A−</button>
+    <button class="btn-toolbar" id="tbFontDec" data-i18n-title="toolbar.font_dec" title="缩小字体">A−</button>
     <span id="tbFontSize" class="tb-font-label">16</span>
-    <button class="btn-toolbar" id="tbFontInc" title="增大字体">A+</button>
+    <button class="btn-toolbar" id="tbFontInc" data-i18n-title="toolbar.font_inc" title="增大字体">A+</button>
   </div>
   <div class="tb-separator"></div>
-  <button class="btn-toolbar" id="tbTts" title="朗读">🔊</button>
-  <button class="btn-toolbar" id="tbTtsStop" title="停止朗读" style="display:none">⏹</button>
+  <button class="btn-toolbar" id="tbTts" data-i18n-title="toolbar.tts" title="朗读">🔊</button>
+  <button class="btn-toolbar" id="tbTtsStop" data-i18n-title="toolbar.tts_stop" title="停止朗读" style="display:none">⏹</button>
   <div class="tb-separator"></div>
-  <button class="btn-toolbar" id="tbSearch" title="搜索">🔍</button>
-  <button class="btn-toolbar" id="tbToc" title="大纲">📑</button>
-  <button class="btn-toolbar" id="tbBookmarkAdd" title="添加书签">🔖</button>
-  <button class="btn-toolbar" id="tbBookmarkList" title="书签列表">📌</button>
-  <button class="btn-toolbar" id="tbHighlights" title="高亮列表">⭐</button>
+  <button class="btn-toolbar" id="tbSearch" data-i18n-title="toolbar.search" title="搜索">🔍</button>
+  <button class="btn-toolbar" id="tbToc" data-i18n-title="toolbar.toc" title="大纲">📑</button>
+  <button class="btn-toolbar" id="tbBookmarkAdd" data-i18n-title="toolbar.bookmark_add" title="添加书签">🔖</button>
+  <button class="btn-toolbar" id="tbBookmarkList" data-i18n-title="toolbar.bookmark_list" title="书签列表">📌</button>
+  <button class="btn-toolbar" id="tbHighlights" data-i18n-title="toolbar.highlights" title="高亮列表">⭐</button>
   <div class="tb-separator"></div>
-  <!-- Mode buttons -->
   <span class="tb-separator"></span>
-  <button class="btn-toolbar" id="tbModeRead" title="阅读模式">📖</button>
-  <button class="btn-toolbar" id="tbModeWysiwyg" title="所见即所得编辑">✏️</button>
-  <button class="btn-toolbar" id="tbModeSource" title="源码编辑">📝</button>
+  <button class="btn-toolbar" id="tbModeRead" data-i18n-title="toolbar.mode_read" title="阅读模式">📖</button>
+  <button class="btn-toolbar" id="tbModeWysiwyg" data-i18n-title="toolbar.mode_wysiwyg" title="所见即所得编辑">✏️</button>
+  <button class="btn-toolbar" id="tbModeSource" data-i18n-title="toolbar.mode_source" title="源码编辑">📝</button>
   <span class="tb-separator"></span>
-  <button class="btn-toolbar" id="tbFullscreen" title="全屏">⛶</button>
+  <button class="btn-toolbar" id="tbFullscreen" data-i18n-title="toolbar.fullscreen" title="全屏">⛶</button>
   <div class="tb-separator"></div>
-  <button class="btn-toolbar" id="tbExport" title="导出">📥</button>
-  <button class="btn-toolbar" id="tbExportPdf" title="导出 PDF">📄</button>
-  <button class="btn-toolbar" id="tbTranslate" title="翻译选中文字">🌐</button>
-  <button class="btn-toolbar" id="tbShortcuts" title="快捷键">⌨️</button>
-  <button class="btn-toolbar" id="tbStats" title="文档统计">📊</button>
-  <button class="btn-toolbar" id="tbExportLog" title="导出日志">📋</button>
+  <button class="btn-toolbar" id="tbExport" data-i18n-title="toolbar.export" title="导出">📥</button>
+  <button class="btn-toolbar" id="tbExportPdf" data-i18n-title="toolbar.export_pdf" title="导出 PDF">📄</button>
+  <button class="btn-toolbar" id="tbTranslate" data-i18n-title="toolbar.translate" title="翻译选中文字">🌐</button>
+  <button class="btn-toolbar" id="tbShortcuts" data-i18n-title="toolbar.shortcuts" title="快捷键">⌨️</button>
+  <button class="btn-toolbar" id="tbStats" data-i18n-title="toolbar.stats" title="文档统计">📊</button>
+  <button class="btn-toolbar" id="tbExportLog" data-i18n-title="toolbar.export_log" title="导出日志">📋</button>
   <span style="flex:1"></span>
   <span id="statusBar" class="status-bar-text"></span>
 </div>
@@ -250,26 +255,26 @@
 <!-- ===== Debug Panel ===== -->
 <div id="debugPanel" class="debug-panel">
   <div class="debug-header" id="debugToggle">
-    <span>🐛 调试日志</span>
-    <button class="btn-icon-sm" id="debugCopy">📋</button>
-    <button class="btn-icon-sm" id="debugClear">🗑</button>
+    <span data-i18n="debug_title">🐛 调试日志</span>
+    <button class="btn-icon-sm" id="debugCopy" data-i18n-title="debug_copy_title" title="📋">📋</button>
+    <button class="btn-icon-sm" id="debugClear" data-i18n-title="debug_clear_title" title="🗑">🗑</button>
   </div>
   <div id="debugBody" class="debug-body" style="display:none"></div>
 </div>
 
 <!-- ===== Selection Toolbar ===== -->
 <div id="selectionToolbar" class="selection-toolbar hidden">
-  <button id="selHighlight" class="btn-sel">⭐ 高亮</button>
-  <button id="selTranslate" class="btn-sel">🌐 翻译</button>
-  <button id="selTts" class="btn-sel">🔊 朗读</button>
-  <button id="selCopy" class="btn-sel">📋 复制</button>
+  <button id="selHighlight" class="btn-sel" data-i18n="sel.highlight">⭐ 高亮</button>
+  <button id="selTranslate" class="btn-sel" data-i18n="sel.translate">🌐 翻译</button>
+  <button id="selTts" class="btn-sel" data-i18n="sel.tts">🔊 朗读</button>
+  <button id="selCopy" class="btn-sel" data-i18n="sel.copy">📋 复制</button>
 </div>
 
 <!-- ===== Modal / Panels ===== -->
 <div class="overlay" id="bookmarkOverlay">
   <div class="dialog dialog-wide">
     <div class="dialog-header">
-      <span>书签</span>
+      <span data-i18n="dialog.bookmark_title">书签</span>
       <button class="btn-icon" data-action="closeBookmarkPanel">✕</button>
     </div>
     <div id="bookmarkList" class="dialog-body"></div>
@@ -279,7 +284,7 @@
 <div class="overlay" id="highlightOverlay">
   <div class="dialog dialog-wide">
     <div class="dialog-header">
-      <span>高亮标注</span>
+      <span data-i18n="dialog.highlight_title">高亮标注</span>
       <button class="btn-icon" data-action="closeHighlightPanel">✕</button>
     </div>
     <div id="highlightList" class="dialog-body"></div>
@@ -289,7 +294,7 @@
 <div class="overlay" id="translateOverlay">
   <div class="dialog">
     <div class="dialog-header">
-      <span>翻译结果</span>
+      <span data-i18n="dialog.translate_title">翻译结果</span>
       <button class="btn-icon" data-action="closeTranslateResult">✕</button>
     </div>
     <div id="translateResult" class="dialog-body translate-result"></div>
@@ -299,6 +304,7 @@
 <!-- ===== Hidden file input ===== -->
 <input type="file" id="fileInput" accept=".md,.markdown,.txt,.html,.htm" style="display:none">
 
+<script src="lang.js"></script>
 <script src="reader.js"></script>
 </body>
 </html>

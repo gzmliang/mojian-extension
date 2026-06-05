@@ -1,6 +1,5 @@
-// 墨笺 InkNote — Background Service Worker
+/* ===== InkNote — Background Service Worker ===== */
 
-// 创建右键菜单
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'open-with-inknote',
@@ -14,17 +13,15 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// 点击扩展图标 → 打开阅读器
 chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: 'reader.html' });
+  chrome.tabs.create({ url: 'reader.html?lang=' + (navigator.language.startsWith('zh') ? 'zh' : 'en') });
 });
 
-// 右键菜单点击处理
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'open-with-inknote' && info.linkUrl) {
-    chrome.tabs.create({ url: `reader.html?url=${encodeURIComponent(info.linkUrl)}` });
+    chrome.tabs.create({ url: 'reader.html?url=' + encodeURIComponent(info.linkUrl) });
   }
   if (info.menuItemId === 'open-text-with-inknote' && info.selectionText) {
-    chrome.tabs.create({ url: `reader.html?text=${encodeURIComponent(info.selectionText)}` });
+    chrome.tabs.create({ url: 'reader.html?text=' + encodeURIComponent(info.selectionText) });
   }
 });
