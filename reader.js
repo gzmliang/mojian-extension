@@ -1144,11 +1144,8 @@ function exportPdf() {
     return;
   }
   log('正在生成 PDF…');
-  // Add print class for @media print styling
   document.body.classList.add('printing');
-  // Trigger browser print dialog (with Save as PDF option)
   window.print();
-  // Remove print class after print dialog closes
   setTimeout(function() {
     document.body.classList.remove('printing');
     log('PDF 导出完成');
