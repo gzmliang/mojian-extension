@@ -1314,6 +1314,7 @@ document.addEventListener('DOMContentLoaded', function() {
     else if (action === 'closeHighlightPanel') closeHighlightPanel();
     else if (action === 'closeTranslateResult') closeTranslateResult();
     else if (action === 'closeShortcuts') document.getElementById('shortcutsOverlay').classList.remove('show');
+    else if (action === 'closeStats') closeStats();
   });
 
   // Click overlay background to close
@@ -1365,44 +1366,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Language switcher
   window._onLangChange = function() {
-    if (window.state && window.state.currentContent) {
-      updateFileInfo(window.state.currentContent, window.state.currentFileName);
+    if (state.currentContent) {
+      updateFileInfo(state.currentContent, state.currentFileName);
     }
     renderRecentFiles();
-    if (window.state && state.searchMatches.length > 0) {
+    if (state.searchMatches.length > 0) {
       document.getElementById('searchInfo').textContent = __('label.search_info_count', {n: state.searchMatches.length});
     }
-    // Re-translate options
     document.querySelectorAll('#settingTtsVoice option').forEach(function(opt) {
       if (opt.dataset.i18n) opt.textContent = __(opt.dataset.i18n);
+    });
+    // Update lang button highlights
+    document.querySelectorAll('.btn-lang').forEach(function(b) {
+      b.style.borderColor = '#ddd'; b.style.color = ''; b.style.fontWeight = '';
+    });
+    document.querySelectorAll('.btn-lang[data-lang="' + getLang() + '"]').forEach(function(b) {
+      b.style.borderColor = '#1a73e8'; b.style.color = '#1a73e8'; b.style.fontWeight = 'bold';
     });
   };
   document.querySelectorAll('.btn-lang').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      setLang(this.dataset.lang);
+      window.setLang(this.dataset.lang);
     });
   });
-  // Highlight current lang button
+  // Init lang button highlight
   document.querySelectorAll('.btn-lang[data-lang="' + getLang() + '"]').forEach(function(btn) {
     btn.style.borderColor = '#1a73e8';
     btn.style.color = '#1a73e8';
     btn.style.fontWeight = 'bold';
   });
-  window.setLang = function(lang) {
-    var oldLang = getLang();
-    if (typeof window._tSetLang !== 'undefined') _tSetLang(lang);
-    else setLang(lang);
-    document.querySelectorAll('.btn-lang').forEach(function(b) {
-      b.style.borderColor = '#ddd';
-      b.style.color = '';
-      b.style.fontWeight = '';
-    });
-    document.querySelectorAll('.btn-lang[data-lang="' + getLang() + '"]').forEach(function(b) {
-      b.style.borderColor = '#1a73e8';
-      b.style.color = '#1a73e8';
-      b.style.fontWeight = 'bold';
-    });
-  };
   // Handle lang URL param
   var langParam = params.get('lang');
   if (langParam && (langParam === 'zh' || langParam === 'en')) {
@@ -1481,8 +1473,11 @@ function showStats() {
     '─────────────',
     __('stats.read_time', {n: Math.max(1, Math.round(total / 500))}),
   ].join('\n');
-  alert(msg);
+  document.getElementById('statsResult').textContent = msg;
+  document.getElementById('statsOverlay').classList.add('show');
 }
+
+function closeStats() { document.getElementById('statsOverlay').classList.remove('show'); }
 
 // ==============================
 // WYSIWYG Table & Image Insert
