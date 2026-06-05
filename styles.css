@@ -513,20 +513,24 @@ body.theme-sepia #cmEditor textarea { background: #f4ecd8; color: #5b4636; }
   body.printing .read-panel.hidden {
     display: none !important;
   }
-  html, body {
+  html, body,
+  body.printing #mainLayout,
+  body.printing #readerMain,
+  body.printing #readPanel {
     overflow: visible !important;
     height: auto !important;
   }
   body.printing #readPanel {
     display: block !important;
     visibility: visible !important;
+    padding: 2.5cm 2cm !important;
   }
   body.printing #content {
     visibility: visible;
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
-    padding: 2.5cm 2cm !important;
+    padding: 0 !important;
     font-size: 12pt !important;
     line-height: 1.8 !important;
     color: #000 !important;
@@ -548,5 +552,5 @@ body.theme-sepia #cmEditor textarea { background: #f4ecd8; color: #5b4636; }
     background: #f9f9f9 !important;
   }
   body.printing .katex-display { page-break-inside: avoid; }
-  @page { margin: 0; }
+  @page { margin: 0.3cm; }
 }
