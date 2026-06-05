@@ -22,18 +22,18 @@
 
 ### 本地存储
 
-本扩展使用浏览器内置的 `localStorage` 和 `chrome.storage` API 在用户设备本地存储以下数据：
+本扩展使用浏览器内置的 `localStorage` API 在用户设备本地存储以下数据：
 
-| 数据类型 | 存储位置 | 用途 |
-|:---------|:---------|:------|
-| 翻译 API 设置（端点、Key、模型） | 本地 | AI 翻译功能配置 |
-| TTS 设置（服务器地址、语音） | 本地 | 文字转语音配置 |
-| 主题偏好 | 本地 | 保存用户主题选择 |
-| 字体大小 | 本地 | 保存用户字体偏好 |
-| 语言偏好 | 本地 | 保存界面语言选择 |
-| 书签（位置索引、文本片段） | 本地 | 文档导航 |
-| 高亮标注（位置、文本） | 本地 | 文本标记 |
-| 最近文件列表 | 本地 | 快速打开最近文档 |
+| 数据类型 | 用途 |
+|:---------|:------|
+| 翻译 API 设置（端点、Key、模型） | AI 翻译功能配置 |
+| TTS 设置（服务器地址、语音） | 文字转语音配置 |
+| 主题偏好 | 保存用户主题选择 |
+| 字体大小 | 保存用户字体偏好 |
+| 语言偏好 | 保存界面语言选择 |
+| 书签（位置索引、文本片段） | 文档导航 |
+| 高亮标注（位置、文本） | 文本标记 |
+| 最近文件列表 | 快速打开最近文档 |
 
 以上所有数据 **仅存储在用户本地设备上**，本扩展不会将任何数据上传到远程服务器。
 
@@ -54,10 +54,8 @@
 | 权限 | 用途 | 说明 |
 |:----|:-----|:------|
 | `contextMenus` | 右键菜单 | 用户右键 .md 链接或选中文本时显示"用墨笺打开"选项，仅读取右键上下文信息 |
-| `storage` | 本地存储 | 持久化保存用户设置和文档标记数据 |
-| `activeTab` | 当前标签页 | 用户点击扩展图标时读取当前页面信息以提供智能操作选项 |
 
-所有权限仅在用户主动操作时触发，不会在后台静默运行。
+本扩展仅申请 **一个** 权限，且仅在用户主动触发右键菜单时使用。
 
 ### 第三方服务
 
@@ -107,18 +105,18 @@ The Extension does **NOT collect** any personal data, including but not limited 
 
 ### Local Storage
 
-The Extension uses the browser's built-in `localStorage` and `chrome.storage` APIs to store the following data locally on the user's device:
+The Extension uses the browser's built-in `localStorage` API to store the following data locally on the user's device:
 
-| Data Type | Storage Location | Purpose |
-|:----------|:-----------------|:--------|
-| Translation API settings (endpoint, key, model) | Local | AI translation configuration |
-| TTS settings (server URL, voice) | Local | Text-to-speech configuration |
-| Theme preference | Local | User theme selection |
-| Font size | Local | User font preference |
-| Language preference | Local | UI language selection |
-| Bookmarks (position index, text snippet) | Local | Document navigation |
-| Highlights (position, text) | Local | Text annotation |
-| Recent files list | Local | Quick document access |
+| Data Type | Purpose |
+|:----------|:--------|
+| Translation API settings (endpoint, key, model) | AI translation configuration |
+| TTS settings (server URL, voice) | Text-to-speech configuration |
+| Theme preference | User theme selection |
+| Font size | User font preference |
+| Language preference | UI language selection |
+| Bookmarks (position index, text snippet) | Document navigation |
+| Highlights (position, text) | Text annotation |
+| Recent files list | Quick document access |
 
 All of the above data is **stored only on the user's local device**. The Extension does not upload any data to remote servers.
 
@@ -139,10 +137,8 @@ The Extension requests the following Chrome API permissions:
 | Permission | Purpose | Description |
 |:-----------|:--------|:------------|
 | `contextMenus` | Context menu | Shows "Open with InkNote" when right-clicking .md links or selected text; reads context info only |
-| `storage` | Local storage | Persists user settings and document annotation data |
-| `activeTab` | Current tab | Reads current page info when the user clicks the extension icon for smart actions |
 
-All permissions are activated only upon explicit user action and do not run silently in the background.
+The Extension requests **only one** permission, used solely when the user actively triggers the context menu.
 
 ### Third-Party Services
 
