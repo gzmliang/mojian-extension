@@ -3,11 +3,9 @@
   "name": "墨笺 InkNote — Markdown Reader",
   "short_name": "InkNote",
   "version": "2.1.1",
-  "description": "专业 Markdown 阅读器。支持 LaTeX 数学公式、Mermaid 图表、TTS 朗读、AI 翻译、高亮标注、大纲导航、编辑模式。",
+  "description": "轻量专业 Markdown 阅读器。支持 LaTeX 数学公式、Mermaid 图表、TTS 朗读、AI 翻译、WYSIWYG 编辑、高亮标注、大纲导航。",
   "permissions": [
-    "contextMenus",
-    "storage",
-    "activeTab"
+    "contextMenus"
   ],
   "action": {
     "default_title": "打开墨笺",
