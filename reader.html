@@ -83,6 +83,30 @@
   </div>
 </div>
 
+<!-- ===== Paste Dialog ===== -->
+<div class="overlay" id="pasteOverlay">
+  <div class="dialog dialog-paste">
+    <div class="dialog-header">
+      <span data-i18n="dialog.paste_title">粘贴文本 / 公式</span>
+      <button class="btn-icon" data-action="closePasteDialog">✕</button>
+    </div>
+    <div class="dialog-body paste-body">
+      <textarea id="pasteTextarea" class="paste-textarea" data-i18n="dialog.paste_placeholder" placeholder="在此粘贴 Markdown 或 LaTeX 公式……" spellcheck="false"></textarea>
+      <div class="paste-options">
+        <label class="paste-checkbox" title="自动将内容包裹在 $$...$$ 中作为独立公式渲染">
+          <input type="checkbox" id="pasteAsFormula">
+          <span data-i18n="dialog.as_formula">作为公式渲染 (自动包裹 $$...$$)</span>
+        </label>
+      </div>
+      <div class="paste-hint" data-i18n="dialog.paste_pro_tip">💡 公式用 $...$ (行内) 或 $$...$$ (独立行)；勾选「作为公式」则自动包裹 $$...$$</div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn-secondary" data-action="closePasteDialog" data-i18n="btn.cancel">取消</button>
+      <button class="btn-primary" id="btnPasteConfirm" data-i18n="dialog.paste_confirm">渲染</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== Settings Dialog ===== -->
 <div class="overlay" id="settingsOverlay">
   <div class="dialog dialog-wide">
@@ -187,6 +211,7 @@
       <div class="welcome-actions">
         <button class="btn-primary btn-lg" id="welcomeOpenFile" data-i18n="btn.open_file">📂 打开文件</button>
         <button class="btn-secondary btn-lg" id="welcomeOpenUrl" data-i18n="btn.open_url">🔗 从 URL 打开</button>
+        <button class="btn-secondary btn-lg" id="welcomePasteText" data-i18n="btn.paste_text">📋 粘贴文本</button>
       </div>
       <div id="recentFilesPanel" class="recent-files-panel">
         <div class="recent-files-title" data-i18n="label.recent_files">最近打开</div>

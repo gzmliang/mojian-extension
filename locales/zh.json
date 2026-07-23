@@ -18,6 +18,7 @@
   "btn.save": "保存",
   "btn.cancel": "取消",
   "btn.confirm_open": "打开",
+  "btn.paste_text": "📋 粘贴文本",
 
   "dialog.url_title": "从 URL 打开",
   "dialog.url_placeholder": "输入 Markdown 文件 URL（支持 GitHub raw）",
@@ -27,6 +28,11 @@
   "dialog.bookmark_title": "书签",
   "dialog.highlight_title": "高亮标注",
   "dialog.stats_title": "文档统计",
+  "dialog.paste_title": "粘贴文本 / 公式",
+  "dialog.paste_placeholder": "在此粘贴 Markdown 或 LaTeX 公式……",
+  "dialog.paste_confirm": "渲染",
+  "dialog.as_formula": "作为公式渲染 (自动包裹 $$...$$)",
+  "dialog.paste_pro_tip": "💡 公式用 $...$ (行内) 或 $$...$$ (独立行)；勾选「作为公式」则自动包裹 $$...$$",
 
   "settings.translate_api": "翻译 API",
   "settings.api_endpoint": "API 端点",
@@ -71,6 +77,8 @@
   "log.file_load_fail": "读取文件失败",
   "log.url_load_fail": "URL 加载失败: {msg}",
   "log.rendered": "渲染完成, HTML长度: {len}",
+  "log.pasted_text": "已粘贴文本 ({chars} 字符)",
+  "log.paste_empty": "粘贴内容为空",
   "log.render_error": "渲染错误: {msg}",
   "log.settings_saved": "设置已保存",
   "log.settings_load": "设置加载: {msg}",

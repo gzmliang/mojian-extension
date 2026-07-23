@@ -1165,6 +1165,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btnSettings').addEventListener('click', openSettings);
   document.getElementById('welcomeOpenFile').addEventListener('click', function() { document.getElementById('fileInput').click(); });
   document.getElementById('welcomeOpenUrl').addEventListener('click', showUrlDialog);
+  document.getElementById('welcomePasteText').addEventListener('click', showPasteDialog);
   document.getElementById('fileInput').addEventListener('change', function(e) {
     if (e.target.files[0]) openLocalFile(e.target.files[0]);
     e.target.value = '';
@@ -1175,6 +1176,16 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   document.getElementById('urlInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') document.getElementById('btnUrlConfirm').click();
+  });
+
+  // Paste dialog
+  document.getElementById('btnPasteConfirm').addEventListener('click', confirmPaste);
+  document.getElementById('pasteTextarea').addEventListener('keydown', function(e) {
+    // Ctrl+Enter or Cmd+Enter to confirm
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      confirmPaste();
+    }
   });
 
   // Theme
@@ -1315,6 +1326,7 @@ document.addEventListener('DOMContentLoaded', function() {
     else if (action === 'closeTranslateResult') closeTranslateResult();
     else if (action === 'closeShortcuts') document.getElementById('shortcutsOverlay').classList.remove('show');
     else if (action === 'closeStats') closeStats();
+    else if (action === 'closePasteDialog') closePasteDialog();
   });
 
   // Click overlay background to close
@@ -1413,6 +1425,41 @@ function showUrlDialog() {
 function closeUrlDialog() { document.getElementById('urlOverlay').classList.remove('show'); }
 function openSettings() { document.getElementById('settingsOverlay').classList.add('show'); }
 function closeSettings() { document.getElementById('settingsOverlay').classList.remove('show'); }
+
+// ==============================
+// Paste Dialog
+// ==============================
+function showPasteDialog() {
+  document.getElementById('pasteOverlay').classList.add('show');
+  document.getElementById('pasteTextarea').value = '';
+  document.getElementById('pasteAsFormula').checked = false;
+  document.getElementById('pasteTextarea').focus();
+}
+function closePasteDialog() {
+  document.getElementById('pasteOverlay').classList.remove('show');
+}
+function confirmPaste() {
+  const textarea = document.getElementById('pasteTextarea');
+  let text = textarea.value.trim();
+  if (!text) { logWarn(__('log.paste_empty')); return; }
+
+  const asFormula = document.getElementById('pasteAsFormula').checked;
+  if (asFormula) {
+    // Wrap in $$...$$ for display math — but if it already has them, don't double-wrap
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('$$') || !trimmed.endsWith('$$')) {
+      text = '$$\n' + trimmed + '\n$$';
+    }
+  }
+
+  closePasteDialog();
+  state.currentContent = text;
+  state.currentFileName = __('btn.paste_text');
+  state.currentFilePath = '';
+  state.isHtmlFile = false;
+  loadContent();
+  log(__('log.pasted_text', {chars: text.length}));
+}
 
 // ==============================
 // Drag & Drop

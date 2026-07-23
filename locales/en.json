@@ -18,6 +18,7 @@
   "btn.save": "Save",
   "btn.cancel": "Cancel",
   "btn.confirm_open": "Open",
+  "btn.paste_text": "📋 Paste Text",
 
   "dialog.url_title": "Open from URL",
   "dialog.url_placeholder": "Enter Markdown file URL (GitHub raw supported)",
@@ -27,6 +28,11 @@
   "dialog.bookmark_title": "Bookmarks",
   "dialog.highlight_title": "Highlights",
   "dialog.stats_title": "Document Statistics",
+  "dialog.paste_title": "Paste Text / Formula",
+  "dialog.paste_placeholder": "Paste Markdown or LaTeX formula here...",
+  "dialog.paste_confirm": "Render",
+  "dialog.as_formula": "Render as formula (auto-wrap $$...$$)",
+  "dialog.paste_pro_tip": "💡 Use $...$ (inline) or $$...$$ (display) for math; check 'as formula' to auto-wrap $$...$$",
 
   "settings.translate_api": "Translate API",
   "settings.api_endpoint": "API Endpoint",
@@ -71,6 +77,8 @@
   "log.file_load_fail": "Failed to read file",
   "log.url_load_fail": "URL load failed: {msg}",
   "log.rendered": "Rendered, HTML length: {len}",
+  "log.pasted_text": "Text pasted ({chars} chars)",
+  "log.paste_empty": "Pasted content is empty",
   "log.render_error": "Render error: {msg}",
   "log.settings_saved": "Settings saved",
   "log.settings_load": "Settings load: {msg}",

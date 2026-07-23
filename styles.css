@@ -130,6 +130,26 @@ body {
   display: flex; flex-direction: column;
 }
 .dialog-wide { min-width: 460px; }
+.dialog-paste { min-width: 520px; max-width: 620px; }
+.paste-body { display: flex; flex-direction: column; gap: 10px; padding-bottom: 6px; }
+.paste-textarea {
+  width: 100%; min-height: 200px; max-height: 400px;
+  padding: 12px; box-sizing: border-box;
+  border: 1px solid #ddd; border-radius: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px; line-height: 1.6;
+  resize: vertical; outline: none;
+  transition: border-color 0.2s;
+}
+.paste-textarea:focus { border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
+.paste-options { display: flex; align-items: center; gap: 6px; }
+.paste-checkbox {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #666; cursor: pointer;
+  user-select: none;
+}
+.paste-checkbox input[type="checkbox"] { margin: 0; cursor: pointer; }
+.paste-hint { font-size: 11px; color: #aaa; line-height: 1.4; }
 .dialog-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 20px 10px;
@@ -436,6 +456,9 @@ body.theme-dark .search-bar input { background: #333; border-color: #444; color:
 body.theme-dark .dialog { background: #2d2d2d; }
 body.theme-dark .dialog-header { border-color: #333; }
 body.theme-dark .dialog-input { background: #333; border-color: #444; color: #e0e0e0; }
+body.theme-dark .paste-textarea { background: #333; border-color: #444; color: #e0e0e0; }
+body.theme-dark .paste-checkbox { color: #999; }
+body.theme-dark .paste-hint { color: #777; }
 body.theme-dark .btn-secondary { background: #333; border-color: #444; color: #ddd; }
 body.theme-dark .btn-secondary:hover { background: #3a3a3a; }
 body.theme-dark .settings-row input, body.theme-dark .settings-row select { background: #333; border-color: #444; color: #e0e0e0; }
@@ -489,6 +512,9 @@ body.theme-sepia .search-bar input { background: #f4ecd8; border-color: #d4c5a9;
 body.theme-sepia .dialog { background: #f4ecd8; }
 body.theme-sepia .dialog-header { border-color: #d4c5a9; }
 body.theme-sepia .dialog-input { background: #f4ecd8; border-color: #d4c5a9; color: #5b4636; }
+body.theme-sepia .paste-textarea { background: #f4ecd8; border-color: #d4c5a9; color: #5b4636; }
+body.theme-sepia .paste-checkbox { color: #8b7355; }
+body.theme-sepia .paste-hint { color: #a09070; }
 body.theme-sepia .btn-secondary { background: #ede0c8; border-color: #d4c5a9; color: #5b4636; }
 body.theme-sepia .btn-secondary:hover { background: #e8dcc8; }
 body.theme-sepia .recent-file-item:hover { background: #e8dcc8; }
